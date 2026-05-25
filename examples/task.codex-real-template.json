@@ -1,0 +1,27 @@
+{
+  "task_id": "task-codex-real-001",
+  "title": "Codex real agent task template",
+  "description": "Template for connecting a real Codex CLI command. Adjust commands before running on a real repository.",
+  "change_type": "bugfix",
+  "repo_path": ".",
+  "worktree_path": ".",
+  "allowed_paths": ["orchestrator", "tests", "examples", "docs", ".omx"],
+  "forbidden_paths": [".env", "secrets", "deploy/prod"],
+  "allowed_command_prefixes": ["codex", "python", "python -m pytest"],
+  "check_commands": {
+    "test": "python -m pytest -q tests",
+    "lint": null,
+    "typecheck": null
+  },
+  "agent_mode": "codex",
+  "agent_commands": {
+    "coder": "python scripts/run_external_agent.py --runtime codex --role coder --task-id {task_id} --prompt-file {prompt_file} --run-dir {run_dir} --worktree .",
+    "fixer": "python scripts/run_external_agent.py --runtime codex --role fixer --task-id {task_id} --prompt-file {prompt_file} --reason-file {reason_file} --run-dir {run_dir} --worktree .",
+    "reviewer": "python scripts/run_external_agent.py --runtime codex --role reviewer --task-id {task_id} --prompt-file {prompt_file} --run-dir {run_dir} --worktree ."
+  },
+  "max_attempts": 2,
+  "max_review_json_retries": 2,
+  "heartbeat_interval_seconds": 30,
+  "command_timeout_seconds": 600,
+  "risk_level": "medium"
+}

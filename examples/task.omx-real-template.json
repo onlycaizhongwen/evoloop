@@ -1,0 +1,28 @@
+﻿{
+  "task_id": "task-omx-real-001",
+  "title": "OMX real agent task template",
+  "description": "Template for connecting a real OMX command. Adjust commands before running on a real repository.",
+  "change_type": "bugfix",
+  "repo_path": ".",
+  "worktree_path": ".",
+  "allowed_paths": ["orchestrator", "tests", "examples", "docs", ".omx"],
+  "forbidden_paths": [".env", "secrets", "deploy/prod"],
+  "allowed_command_prefixes": ["python", "python -m pytest"],
+  "check_commands": {
+    "test": "python -m pytest -q tests",
+    "lint": null,
+    "typecheck": null
+  },
+  "agent_mode": "omx",
+  "agent_commands": {
+    "coder": "python scripts/run_external_agent.py --runtime omx --role coder --task-id {task_id} --prompt-file {prompt_file} --run-dir {run_dir} --worktree . --stdin-prompt",
+    "fixer": "python scripts/run_external_agent.py --runtime omx --role fixer --task-id {task_id} --prompt-file {prompt_file} --reason-file {reason_file} --run-dir {run_dir} --worktree . --stdin-prompt",
+    "reviewer": "python scripts/run_external_agent.py --runtime omx --role reviewer --task-id {task_id} --prompt-file {prompt_file} --run-dir {run_dir} --worktree . --stdin-prompt --output-last-message {attempt_dir}/omx_reviewer_last_message.txt"
+  },
+  "max_attempts": 2,
+  "max_review_json_retries": 2,
+  "heartbeat_interval_seconds": 30,
+  "command_timeout_seconds": 600,
+  "risk_level": "medium"
+}
+

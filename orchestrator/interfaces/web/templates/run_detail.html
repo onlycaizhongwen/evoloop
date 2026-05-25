@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ run_id }}</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <a href="/" class="back">返回首页</a>
+        <h1>任务结果</h1>
+        <p>{{ state.task_id }} / 第 {{ state.attempt }}/{{ state.max_attempts }} 次尝试</p>
+      </div>
+    </header>
+
+    <section class="hero-status {{ summary.tone }}">
+      <div>
+        <p class="eyebrow">当前状态</p>
+        <h2>{{ summary.title }}</h2>
+        <p>{{ summary.message }}</p>
+      </div>
+      <div class="next-action">
+        <strong>下一步</strong>
+        <span>{{ summary.action }}</span>
+      </div>
+    </section>
+
+    <section class="summary-grid">
+      <div class="metric">
+        <span>任务编号</span>
+        <strong>{{ state.task_id }}</strong>
+      </div>
+      <div class="metric">
+        <span>运行状态</span>
+        <strong>{{ state.status }}</strong>
+      </div>
+      <div class="metric">
+        <span>当前阶段</span>
+        <strong>{{ state.current_phase }}</strong>
+      </div>
+      <div class="metric">
+        <span>补丁状态</span>
+        <strong>{{ summary.patch_stats }}</strong>
+      </div>
+    </section>
+
+    <section class="grid detail-grid">
+      <section class="panel">
+        <h2>补丁审批</h2>
+        <div class="list">
+          {% for patch in patches %}
+          <div class="patch-card">
+            <div>
+              <strong>{{ patch.patch }}</strong>
+              <p>状态：{{ patch.status }} / 风险分：{{ patch.risk_score }} / 操作：{{ patch.ops }}</p>
+              <p>文件：{{ patch.files or "无" }}</p>
+              <p>风险原因：{{ patch.risk_reasons | join(", ") or "无" }}</p>
+              {% if patch.summary %}
+              <p>摘要：{{ patch.summary }}</p>
+              {% endif %}
+              <p>审批后验证：{{ patch.rerun_status or "未运行" }} / 原因：{{ patch.rerun_reason or "无" }}</p>
+            </div>
+            {% if patch.operations %}
+            <details class="patch-preview" open>
+              <summary>补丁预览</summary>
+              {% for operation in patch.operations %}
+              <div class="operation-preview">
+                <div class="operation-meta">
+                  <span>{{ operation.op }}</span>
+                  <strong>{{ operation.path }}</strong>
+                </div>
+                <pre>{{ operation.preview or "无预览内容" }}</pre>
+              </div>
+              {% endfor %}
+            </details>
+            {% endif %}
+            {% if patch.status == "pending" %}
+            <form method="post" action="/patches/apply" class="actions">
+              <input type="hidden" name="run_id" value="{{ run_id }}">
+              <input type="hidden" name="patch" value="{{ patch.patch }}">
+              <input type="hidden" name="reviewer" value="web">
+              <input type="hidden" name="note" value="approved from web">
+              <label class="check"><input type="checkbox" name="rerun_task" checked> 批准后重新验证</label>
+              <button type="submit">批准并验证</button>
+            </form>
+            <form method="post" action="/patches/reject" class="actions">
+              <input type="hidden" name="run_id" value="{{ run_id }}">
+              <input type="hidden" name="patch" value="{{ patch.patch }}">
+              <input type="hidden" name="reviewer" value="web">
+              <input type="hidden" name="note" value="rejected from web">
+              <button class="secondary" type="submit">拒绝补丁</button>
+            </form>
+            {% endif %}
+          </div>
+          {% else %}
+          <p class="empty">没有待处理补丁。这个任务没有需要手动审批的改动。</p>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>最终结论</h2>
+        <pre>{{ final_report or "暂时没有最终报告。" }}</pre>
+      </section>
+    </section>
+
+    <details class="panel diagnostics">
+      <summary>诊断日志，排查问题时再看</summary>
+      <section class="grid detail-grid logs">
+        <section>
+          <h2>阶段日志</h2>
+          <pre>{{ phase_log or "暂无 phase.log" }}</pre>
+        </section>
+        <section>
+          <h2>Agent 日志</h2>
+          <pre>{{ agent_log or "暂无 agent.log" }}</pre>
+        </section>
+        <section>
+          <h2>Team Result</h2>
+          <pre>{{ team_result or "暂无 team_result.json" }}</pre>
+        </section>
+        <section>
+          <h2>Team Diagnostics</h2>
+          <pre>{{ team_diagnostics or "暂无 team_diagnostics.json" }}</pre>
+        </section>
+      </section>
+    </details>
+  </main>
+</body>
+</html>

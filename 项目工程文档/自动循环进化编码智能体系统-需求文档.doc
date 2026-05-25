@@ -1,0 +1,241 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>自动循环进化编码智能体系统 - 需求文档</title>
+<style>
+@page { size: A4; margin: 18mm 18mm 18mm 18mm; }
+body {
+  font-family: "Microsoft YaHei", "SimSun", Arial, sans-serif;
+  color: #1f2933;
+  line-height: 1.42;
+  font-size: 10.5px;
+}
+.cover {
+  text-align: center;
+  padding: 18px 0 16px;
+  border-bottom: 3px solid #1f4e79;
+  margin-bottom: 16px;
+}
+.cover h1 {
+  color: #1f4e79;
+  font-size: 24px;
+  margin: 0 0 7px;
+  letter-spacing: 0;
+}
+.cover .subtitle {
+  color: #5b6670;
+  font-size: 13px;
+}
+h1 {
+  color: #1f4e79;
+  font-size: 17px;
+  border-bottom: 1px solid #d7e3ef;
+  padding-bottom: 4px;
+  margin-top: 18px;
+}
+h2 {
+  color: #2f5597;
+  font-size: 13.5px;
+  margin-top: 14px;
+}
+h3 {
+  color: #374151;
+  font-size: 11.5px;
+  margin-top: 11px;
+}
+p { margin: 4px 0; }
+ul, ol { margin-top: 3px; margin-bottom: 6px; }
+li { margin: 2px 0; }
+code {
+  font-family: Consolas, "Courier New", monospace;
+  color: #b23b3b;
+  background: #f7f7f7;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+pre {
+  background: #f6f8fa;
+  border: 1px solid #d9e2ec;
+  border-left: 4px solid #2f5597;
+  padding: 7px 9px;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 8.5px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 11px;
+  font-size: 9.5px;
+}
+th {
+  background: #d9eaf7;
+  color: #1f2933;
+  font-weight: 700;
+}
+th, td {
+  border: 1px solid #aebfd0;
+  padding: 4px 5px;
+  vertical-align: top;
+}
+tr:nth-child(even) td { background: #fbfdff; }
+.diagram {
+  margin: 14px 0 16px;
+  text-align: center;
+  page-break-inside: avoid;
+}
+.diagram img {
+  max-width: 94%;
+  border: 1px solid #d7e3ef;
+  box-shadow: 0 2px 8px rgba(31, 78, 121, 0.12);
+}
+.diagram-title {
+  color: #5b6670;
+  font-size: 9.5px;
+  margin-top: 5px;
+}
+.slide {
+  page-break-inside: avoid;
+  border-left: 5px solid #1f4e79;
+  padding-left: 14px;
+}
+</style>
+</head>
+<body>
+<div class="cover">
+  <h1>自动循环进化编码智能体系统</h1>
+  <div class="subtitle">需求文档</div>
+</div>
+<div class="diagram"><img src="file:///D:/czw_ai_project/%E8%87%AA%E8%BF%9B%E5%8C%96%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE%E5%B7%A5%E7%A8%8B%E6%96%87%E6%A1%A3/assets/workflow.png" alt="图 1：单任务自动循环流程"><div class="diagram-title">图 1：单任务自动循环流程</div></div>
+<div class="diagram"><img src="file:///D:/czw_ai_project/%E8%87%AA%E8%BF%9B%E5%8C%96%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE%E5%B7%A5%E7%A8%8B%E6%96%87%E6%A1%A3/assets/quality-gate.png" alt="图 2：质量门控评分模型"><div class="diagram-title">图 2：质量门控评分模型</div></div>
+<h1>自动循环进化编码智能体系统 - 需求文档</h1>
+<h1>1. 背景</h1>
+<p>当前 AI 编码工具已经能够生成代码、执行命令和辅助修复问题，但在真实工程交付中仍存在几个明显缺口：</p>
+<ul>
+<li>Agent 容易只完成“看起来能运行”的局部代码，缺少稳定质量门控。</li>
+<li>模型自报置信度不可直接作为交付依据。</li>
+<li>自动执行命令存在误删、越权、泄露敏感信息等安全风险。</li>
+<li>多轮修复缺少结构化状态，失败后难以恢复和审计。</li>
+<li>经验沉淀容易停留在聊天记录中，难以转化为可复用规则。</li>
+</ul>
+<p>本系统希望在 Codex CLI、oh-my-codex（OMX）和 Skills 机制之上，构建一个自动循环编码智能体系统。系统先以单任务 MVP 闭环为目标，做到可验证、可恢复、可审计，再逐步扩展到多 Agent 协作和受控技能进化。</p>
+<h1>2. 目标</h1>
+<h2>2.1 产品目标</h2>
+<ul>
+<li>提供一个可自动执行单个工程任务的编码闭环。</li>
+<li>在代码生成后自动运行测试、Lint、类型检查和 Review。</li>
+<li>通过质量门控决定任务完成、重试或暂停。</li>
+<li>在失败时保留结构化日志、报告和人工介入信息。</li>
+<li>将重复错误沉淀为候选规则，但不自动污染正式 Skill。</li>
+</ul>
+<h2>2.2 对外表达目标</h2>
+<ul>
+<li>对业务方讲清楚：系统解决什么问题、带来什么价值、风险如何控制。</li>
+<li>对技术团队讲清楚：系统边界、核心流程、数据契约、实现优先级。</li>
+<li>对管理方讲清楚：先做 MVP，再做扩展，不追求一开始完全自治。</li>
+</ul>
+<h1>3. 用户与角色</h1>
+<table>
+<tr><th>角色</th><th>关注点</th><th>典型诉求</th></tr>
+<tr><td>开发者</td><td>编码效率、失败定位、可控自动化</td><td>让 Agent 自动完成小任务，但不要破坏工程</td></tr>
+<tr><td>Tech Lead</td><td>质量、架构一致性、团队规范</td><td>自动化必须可审计、可暂停、可回滚</td></tr>
+<tr><td>测试/QA</td><td>验收标准、回归风险</td><td>自动修复必须有测试和报告</td></tr>
+<tr><td>运维/安全</td><td>命令权限、路径边界、敏感信息</td><td>禁止危险命令和越权修改</td></tr>
+<tr><td>管理者</td><td>成本、效率、阶段成果</td><td>有清晰 MVP、路线图和风险治理</td></tr>
+</table>
+<h1>4. 范围</h1>
+<h2>4.1 MVP 范围</h2>
+<ul>
+<li>支持读取一个结构化 <code>task.json</code>。</li>
+<li>支持单任务自动编码、检查、审查、修复循环。</li>
+<li>支持 Hard Check：测试、Lint、类型检查。</li>
+<li>支持 Reviewer 输出 <code>review.json</code>。</li>
+<li>支持 malformed JSON 最多 2 次重试。</li>
+<li>支持 <code>review.task_id == task.task_id</code> 一致性校验。</li>
+<li>支持质量评分与通过/重试/暂停决策。</li>
+<li>支持 Diff 风险评分。</li>
+<li>支持 <code>change_type</code>：<code>feature</code>、<code>bugfix</code>、<code>refactor</code>、<code>config</code>。</li>
+<li>支持安全策略：允许路径、禁止路径、权限等级、危险命令阻断。</li>
+<li>支持 heartbeat 与运行状态持久化。</li>
+<li>支持生成 pending rule proposal，但不自动写入正式 Skill。</li>
+</ul>
+<h2>4.2 非目标</h2>
+<ul>
+<li>MVP 不做复杂 DAG 自动拆分。</li>
+<li>MVP 不做多任务并行合并。</li>
+<li>MVP 不自动创建 PR、不自动合并主分支。</li>
+<li>MVP 不自动修改正式 Skill。</li>
+<li>MVP 不提供完整 Web Dashboard。</li>
+<li>MVP 不自动处理数据库迁移、生产配置、线上发布等高风险变更。</li>
+</ul>
+<h1>5. 关键场景</h1>
+<h2>5.1 Bugfix 自动修复</h2>
+<p>用户输入一个缺陷任务，系统生成修复代码，运行测试和静态检查，再通过 Reviewer 判断是否有测试缺口或逻辑风险。若质量门控通过，则输出最终报告；若失败，则进入修复循环。</p>
+<h2>5.2 Feature 小需求实现</h2>
+<p>用户输入一个小功能任务，系统生成代码和测试。若源码变更但未更新测试，Diff 风险评分扣分，Reviewer 需要检查测试缺口。</p>
+<h2>5.3 Refactor 安全重构</h2>
+<p>用户输入不改变外部行为的重构任务。系统允许源码变化但不强制扣“未新增测试”分，同时要求 Reviewer 确认外部行为未改变。</p>
+<h2>5.4 Config 配置调整</h2>
+<p>用户输入配置类任务。系统先检查 <code>forbidden_paths</code>，未命中时将权限映射为 <code>elevated</code>，并记录原因；命中禁止路径则直接阻断。</p>
+<h2>5.5 Reviewer 输出异常</h2>
+<p>Reviewer 输出非法 JSON 或 <code>task_id</code> 不匹配时，系统保存原始输出，并携带字段模板与动态 <code>task_id</code> 重新请求 JSON。超过 2 次仍失败，则暂停并输出人工介入报告。</p>
+<h1>6. 功能需求</h1>
+<table>
+<tr><th>ID</th><th>需求</th><th>优先级</th></tr>
+<tr><td>FR-01</td><td>系统应读取并校验 <code>task.json</code></td><td>P0</td></tr>
+<tr><td>FR-02</td><td>系统应调用 Coder/Fixer 执行单任务代码修改</td><td>P0</td></tr>
+<tr><td>FR-03</td><td>系统应执行测试、Lint、类型检查等 Hard Check</td><td>P0</td></tr>
+<tr><td>FR-04</td><td>Hard Check 失败时应短路 Reviewer，直接进入 fix 或 halt</td><td>P0</td></tr>
+<tr><td>FR-05</td><td>系统应调用 Reviewer 并解析 <code>review.json</code></td><td>P0</td></tr>
+<tr><td>FR-06</td><td>Reviewer JSON 非法时应最多重试 2 次</td><td>P0</td></tr>
+<tr><td>FR-07</td><td>系统应校验 <code>review.task_id == task.task_id</code></td><td>P0</td></tr>
+<tr><td>FR-08</td><td>系统应计算质量分并做出 done/retry/halt 决策</td><td>P0</td></tr>
+<tr><td>FR-09</td><td>系统应按 Diff 规则计算风险分</td><td>P0</td></tr>
+<tr><td>FR-10</td><td>系统应按 <code>change_type</code> 调整测试覆盖扣分策略</td><td>P0</td></tr>
+<tr><td>FR-11</td><td><code>change_type=config</code> 时应先检查 forbidden，再映射 elevated</td><td>P0</td></tr>
+<tr><td>FR-12</td><td>系统应输出 heartbeat 和阶段日志</td><td>P1</td></tr>
+<tr><td>FR-13</td><td>系统应持久化运行状态和产物</td><td>P1</td></tr>
+<tr><td>FR-14</td><td>系统应生成 pending rule proposal</td><td>P2</td></tr>
+</table>
+<h1>7. 非功能需求</h1>
+<table>
+<tr><th>ID</th><th>需求</th><th>说明</th></tr>
+<tr><td>NFR-01</td><td>可恢复</td><td>任务中断后可根据 <code>run_state.json</code> 和产物恢复定位</td></tr>
+<tr><td>NFR-02</td><td>可审计</td><td>每次尝试、检查、Review、质量判断都应有结构化记录</td></tr>
+<tr><td>NFR-03</td><td>安全性</td><td>默认限制写入路径、危险命令和敏感文件访问</td></tr>
+<tr><td>NFR-04</td><td>可观测性</td><td>长耗时命令必须通过 heartbeat 表明进程仍存活</td></tr>
+<tr><td>NFR-05</td><td>可扩展性</td><td>后续可扩展多 Agent、任务队列和受控技能进化</td></tr>
+<tr><td>NFR-06</td><td>可解释性</td><td>质量分、失败原因和暂停原因必须可读</td></tr>
+</table>
+<h1>8. 完成标准</h1>
+<p>MVP 完成时应满足：</p>
+<ul>
+<li>能完成至少一个 bugfix 类型单任务闭环。</li>
+<li>Hard Check 失败时不会调用 Reviewer。</li>
+<li>Reviewer JSON 异常能重试并保存原始输出。</li>
+<li><code>task_id</code> 不一致能被识别为 malformed review。</li>
+<li><code>change_type=refactor</code> 不会被“源码改但测试未改”误伤。</li>
+<li><code>change_type=config</code> 能触发 elevated 权限映射，且 forbidden 优先。</li>
+<li>最终能输出 <code>quality_report.json</code>、<code>run_state.json</code> 和 <code>final_report.md</code>。</li>
+</ul>
+<h1>9. 依赖</h1>
+<ul>
+<li>Codex CLI 可用。</li>
+<li>OMX 或等价 Agent 调用方式可用。</li>
+<li>项目具备可执行测试、Lint 或类型检查命令。</li>
+<li>工作区有可写目录和可配置安全策略。</li>
+<li>Skills 机制可加载项目规则。</li>
+</ul>
+<h1>10. 风险</h1>
+<table>
+<tr><th>风险</th><th>应对</th></tr>
+<tr><td>模型输出不稳定</td><td>Schema 校验、JSON 重试、task_id 强校验</td></tr>
+<tr><td>自动命令危险</td><td>权限等级、命令策略、路径策略</td></tr>
+<tr><td>质量门控误判</td><td>Hard Check + Review + Diff 风险组合评分</td></tr>
+<tr><td>任务无限循环</td><td>最大尝试次数和熔断规则</td></tr>
+<tr><td>技能进化污染</td><td>只生成候选规则，人工审核后生效</td></tr>
+</table>
+</body>
+</html>

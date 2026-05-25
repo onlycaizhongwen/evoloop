@@ -1,0 +1,67 @@
+{
+  "schema_version": "1.0",
+  "task_id": "task-omx-team-patch-001",
+  "mode": "omx_team_patch",
+  "change_type": "bugfix",
+  "title": "Fix calculator addition",
+  "description": "The add function currently subtracts. Produce a controlled patch JSON that changes it to addition.",
+  "worktree_path": ".tmp/real-project-smoke",
+  "allowed_paths": [
+    "calculator.py",
+    "tests/test_calculator.py"
+  ],
+  "forbidden_paths": [
+    ".env",
+    "secrets",
+    "deploy/prod"
+  ],
+  "roles": [
+    {
+      "role": "planner",
+      "required": true,
+      "output": "team_plan.json"
+    },
+    {
+      "role": "coder",
+      "required": true,
+      "output": "patch_plan.json"
+    },
+    {
+      "role": "reviewer",
+      "required": true,
+      "output": "review.json"
+    },
+    {
+      "role": "tester",
+      "required": false,
+      "output": "test_recommendation.json"
+    },
+    {
+      "role": "gatekeeper",
+      "required": false,
+      "output": "gate_advice.json"
+    },
+    {
+      "role": "fixer",
+      "required": false,
+      "output": "fix_patch_plan.json"
+    }
+  ],
+  "final_artifacts": {
+    "patch_plan": "patch_plan.json",
+    "review": "review.json",
+    "diagnostics": "team_diagnostics.json"
+  },
+  "constraints": {
+    "team_may_write_worktree": false,
+    "patch_schema_version": "1.0",
+    "review_schema_version": "1.0",
+    "orchestrator_is_final_gate": true,
+    "required_patch_operations": [
+      "replace_text",
+      "create_file",
+      "delete_file",
+      "unified_diff"
+    ]
+  }
+}

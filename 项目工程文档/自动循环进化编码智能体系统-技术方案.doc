@@ -1,0 +1,339 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>自动循环进化编码智能体系统 - 技术方案</title>
+<style>
+@page { size: A4; margin: 18mm 18mm 18mm 18mm; }
+body {
+  font-family: "Microsoft YaHei", "SimSun", Arial, sans-serif;
+  color: #1f2933;
+  line-height: 1.42;
+  font-size: 10.5px;
+}
+.cover {
+  text-align: center;
+  padding: 18px 0 16px;
+  border-bottom: 3px solid #1f4e79;
+  margin-bottom: 16px;
+}
+.cover h1 {
+  color: #1f4e79;
+  font-size: 24px;
+  margin: 0 0 7px;
+  letter-spacing: 0;
+}
+.cover .subtitle {
+  color: #5b6670;
+  font-size: 13px;
+}
+h1 {
+  color: #1f4e79;
+  font-size: 17px;
+  border-bottom: 1px solid #d7e3ef;
+  padding-bottom: 4px;
+  margin-top: 18px;
+}
+h2 {
+  color: #2f5597;
+  font-size: 13.5px;
+  margin-top: 14px;
+}
+h3 {
+  color: #374151;
+  font-size: 11.5px;
+  margin-top: 11px;
+}
+p { margin: 4px 0; }
+ul, ol { margin-top: 3px; margin-bottom: 6px; }
+li { margin: 2px 0; }
+code {
+  font-family: Consolas, "Courier New", monospace;
+  color: #b23b3b;
+  background: #f7f7f7;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+pre {
+  background: #f6f8fa;
+  border: 1px solid #d9e2ec;
+  border-left: 4px solid #2f5597;
+  padding: 7px 9px;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 8.5px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 11px;
+  font-size: 9.5px;
+}
+th {
+  background: #d9eaf7;
+  color: #1f2933;
+  font-weight: 700;
+}
+th, td {
+  border: 1px solid #aebfd0;
+  padding: 4px 5px;
+  vertical-align: top;
+}
+tr:nth-child(even) td { background: #fbfdff; }
+.diagram {
+  margin: 14px 0 16px;
+  text-align: center;
+  page-break-inside: avoid;
+}
+.diagram img {
+  max-width: 94%;
+  border: 1px solid #d7e3ef;
+  box-shadow: 0 2px 8px rgba(31, 78, 121, 0.12);
+}
+.diagram-title {
+  color: #5b6670;
+  font-size: 9.5px;
+  margin-top: 5px;
+}
+.slide {
+  page-break-inside: avoid;
+  border-left: 5px solid #1f4e79;
+  padding-left: 14px;
+}
+</style>
+</head>
+<body>
+<div class="cover">
+  <h1>自动循环进化编码智能体系统</h1>
+  <div class="subtitle">技术方案</div>
+</div>
+<div class="diagram"><img src="file:///D:/czw_ai_project/%E8%87%AA%E8%BF%9B%E5%8C%96%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE%E5%B7%A5%E7%A8%8B%E6%96%87%E6%A1%A3/assets/architecture.png" alt="图 1：系统总体架构"><div class="diagram-title">图 1：系统总体架构</div></div>
+<div class="diagram"><img src="file:///D:/czw_ai_project/%E8%87%AA%E8%BF%9B%E5%8C%96%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE%E5%B7%A5%E7%A8%8B%E6%96%87%E6%A1%A3/assets/workflow.png" alt="图 2：核心执行流程"><div class="diagram-title">图 2：核心执行流程</div></div>
+<div class="diagram"><img src="file:///D:/czw_ai_project/%E8%87%AA%E8%BF%9B%E5%8C%96%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE%E5%B7%A5%E7%A8%8B%E6%96%87%E6%A1%A3/assets/quality-gate.png" alt="图 3：质量门控模型"><div class="diagram-title">图 3：质量门控模型</div></div>
+<h1>自动循环进化编码智能体系统 - 对外技术方案</h1>
+<h1>1. 方案摘要</h1>
+<p>自动循环进化编码智能体系统是一套面向工程交付的 AI 编码流水线。它不把“模型回答”直接视为交付结果，而是通过自动编码、硬性检查、结构化审查、质量门控、安全策略和状态持久化，形成一个可控的单任务闭环。</p>
+<p>系统的第一阶段目标是 MVP：单任务自动循环。后续再扩展到多 Agent 并行、任务队列和受控技能进化。</p>
+<h1>2. 设计原则</h1>
+<ul>
+<li>先可控，再自动。</li>
+<li>先单任务闭环，再多 Agent 编排。</li>
+<li>质量门控不能只依赖模型置信度。</li>
+<li>安全策略必须前置于自动执行。</li>
+<li>技能进化只能提案，不能默认自动生效。</li>
+<li>所有关键决策必须可恢复、可审计。</li>
+</ul>
+<h1>3. 总体架构</h1>
+<pre>graph TD
+    U[用户任务] --&gt; O[Orchestrator]
+
+    subgraph Control[控制层]
+        O --&gt; S[(Run State)]
+        O --&gt; G[Quality Gate]
+        O --&gt; P[Safety Policy]
+        O --&gt; H[Heartbeat Logger]
+        O --&gt; R[Rule Proposal Engine]
+    end
+
+    subgraph Runtime[运行时层]
+        OMX[OMX / Agent Runtime]
+        CLI[Codex CLI]
+        Skills[Skills]
+    end
+
+    subgraph Workspace[工程工作区]
+        W[Git Worktree / Branch]
+        C[Test / Lint / Typecheck]
+        A[Artifacts]
+    end
+
+    O --&gt; OMX
+    OMX --&gt; CLI
+    OMX --&gt; Skills
+    OMX --&gt; W
+    O --&gt; C
+    C --&gt; G
+    G --&gt; S
+    CLI --&gt; A
+    R --&gt; A
+    H --&gt; A</pre>
+<h1>4. 核心模块</h1>
+<table>
+<tr><th>模块</th><th>职责</th></tr>
+<tr><td>Orchestrator</td><td>主控流程，负责读取任务、调用 Agent、执行门控、维护状态</td></tr>
+<tr><td>Agent Adapter</td><td>封装 OMX/Codex CLI 调用</td></tr>
+<tr><td>Check Runner</td><td>执行测试、Lint、类型检查</td></tr>
+<tr><td>Review Parser</td><td>解析 Reviewer JSON，处理 malformed JSON 重试和 task_id 校验</td></tr>
+<tr><td>Quality Gate</td><td>计算质量分，做出 done/retry/halt 决策</td></tr>
+<tr><td>Safety Policy</td><td>管理权限、路径、命令和风险边界</td></tr>
+<tr><td>State Store</td><td>保存 run_state、attempt 产物、最终报告</td></tr>
+<tr><td>Heartbeat Logger</td><td>输出阶段日志和长耗时命令心跳</td></tr>
+<tr><td>Rule Proposal Engine</td><td>从日志中生成候选规则，不自动生效</td></tr>
+</table>
+<h1>5. 核心流程</h1>
+<pre>stateDiagram-v2
+    [*] --&gt; TaskInput: task.json
+    TaskInput --&gt; Precheck: 安全与环境预检
+    Precheck --&gt; Code: Coder 生成代码
+    Code --&gt; HardCheck: Test / Lint / Typecheck
+    HardCheck --&gt; Fix: 失败，短路 Reviewer
+    HardCheck --&gt; Review: 通过，调用 Reviewer
+    Review --&gt; Parse: 解析 review.json
+    Parse --&gt; RetryReview: JSON 非法或 task_id 不匹配
+    RetryReview --&gt; Review: 未超过 2 次
+    Parse --&gt; Gate: 合法
+    Gate --&gt; Done: quality_score &gt;= 80
+    Gate --&gt; Fix: 未达标且可重试
+    Fix --&gt; Code: 进入下一轮
+    Gate --&gt; Halt: 触发熔断
+    RetryReview --&gt; Halt: 超过重试
+    Done --&gt; Proposal: 候选规则生成
+    Proposal --&gt; [*]
+    Halt --&gt; [*]</pre>
+<h1>6. 数据契约</h1>
+<h2>6.1 task.json</h2>
+<p><code>task.json</code> 是任务入口，至少包含：</p>
+<ul>
+<li><code>task_id</code></li>
+<li><code>title</code></li>
+<li><code>description</code></li>
+<li><code>change_type</code></li>
+<li><code>repo_path</code></li>
+<li><code>worktree_path</code></li>
+<li><code>allowed_paths</code></li>
+<li><code>forbidden_paths</code></li>
+<li><code>check_commands</code></li>
+<li><code>max_attempts</code></li>
+<li><code>max_review_json_retries</code></li>
+<li><code>heartbeat_interval_seconds</code></li>
+</ul>
+<p><code>change_type</code> 支持：</p>
+<ul>
+<li><code>feature</code></li>
+<li><code>bugfix</code></li>
+<li><code>refactor</code></li>
+<li><code>config</code></li>
+</ul>
+<h2>6.2 review.json</h2>
+<p>Reviewer 必须输出：</p>
+<ul>
+<li><code>schema_version</code></li>
+<li><code>task_id</code></li>
+<li><code>pass</code></li>
+<li><code>confidence</code></li>
+<li><code>summary</code></li>
+<li><code>issues</code></li>
+<li><code>blocking</code></li>
+<li><code>recommended_next_action</code></li>
+</ul>
+<p>解析成功后必须校验：</p>
+<pre>review.task_id == task.task_id</pre>
+<p>不一致时按 malformed review 处理。</p>
+<h2>6.3 quality_report.json</h2>
+<p>质量报告记录：</p>
+<ul>
+<li>Hard Check 结果</li>
+<li>Review 结果</li>
+<li>JSON 重试次数</li>
+<li>Diff 风险分</li>
+<li>总质量分</li>
+<li>最终决策</li>
+</ul>
+<h1>7. 质量门控</h1>
+<h2>7.1 Hard Check 短路</h2>
+<p>如果测试、Lint 或类型检查失败：</p>
+<ul>
+<li>不调用 Reviewer。</li>
+<li>不计算最终质量分。</li>
+<li>直接进入 Fix 或 Halt。</li>
+</ul>
+<h2>7.2 综合评分</h2>
+<table>
+<tr><th>项目</th><th>分值</th></tr>
+<tr><td>测试通过</td><td>40</td></tr>
+<tr><td>Lint 通过</td><td>10</td></tr>
+<tr><td>类型检查通过</td><td>10</td></tr>
+<tr><td>Review 通过</td><td>20</td></tr>
+<tr><td>Reviewer 置信度</td><td>10</td></tr>
+<tr><td>Diff 风险</td><td>10</td></tr>
+</table>
+<p>通过条件：</p>
+<ul>
+<li>总分 <code>&gt;= 80</code></li>
+<li>无阻断项</li>
+<li>未触发安全策略</li>
+<li>未触发熔断</li>
+</ul>
+<h1>8. 安全策略</h1>
+<h2>8.1 权限等级</h2>
+<table>
+<tr><th>等级</th><th>允许行为</th></tr>
+<tr><td>read-only</td><td>搜索、读取、查看 diff</td></tr>
+<tr><td>workspace-write</td><td>修改允许路径内文件、运行测试</td></tr>
+<tr><td>elevated</td><td>修改配置、CI、迁移、部署相关文件</td></tr>
+<tr><td>forbidden</td><td>删除仓库、读取密钥、生产操作</td></tr>
+</table>
+<h2>8.2 config 权限映射</h2>
+<p>当 <code>change_type=config</code>：</p>
+<ol>
+<li>先检查目标路径是否命中 <code>forbidden_paths</code>。</li>
+<li>命中则直接阻断。</li>
+<li>未命中则映射为 <code>elevated</code>。</li>
+<li>记录日志：<code>reason=change_type_config_requires_elevated</code>。</li>
+</ol>
+<h2>8.3 路径约束</h2>
+<p>所有写入必须满足：</p>
+<ul>
+<li>在 <code>worktree_path</code> 内。</li>
+<li>属于 <code>allowed_paths</code>。</li>
+<li>不属于 <code>forbidden_paths</code>。</li>
+<li>不通过符号链接逃逸工作区。</li>
+</ul>
+<h1>9. 状态与产物</h1>
+<p>建议目录：</p>
+<pre>.omx/runs/{run_id}/
+├── task.json
+├── run_state.json
+├── attempts/
+│   └── 001/
+│       ├── hard_checks.json
+│       ├── review.json
+│       ├── malformed_review_1.txt
+│       ├── quality_report.json
+│       └── agent.log
+├── pending-rules/
+└── final_report.md</pre>
+<h1>10. 受控技能进化</h1>
+<p>系统可以根据重复错误生成候选规则，但规则默认进入 <code>pending-rules/</code>，不得自动写入正式 Skill。</p>
+<p>候选规则必须包含：</p>
+<ul>
+<li>来源任务。</li>
+<li>触发证据。</li>
+<li>问题模式。</li>
+<li>建议规则。</li>
+<li>适用范围。</li>
+<li>不适用范围。</li>
+<li>审核状态。</li>
+</ul>
+<h1>11. MVP 验收</h1>
+<ul>
+<li>能完成单个 bugfix 闭环。</li>
+<li>Hard Check 失败能短路。</li>
+<li>Review JSON 非法能重试。</li>
+<li>task_id 不一致能阻断。</li>
+<li>Diff 风险能量化。</li>
+<li>config 类型能触发 elevated。</li>
+<li>能输出 final report。</li>
+</ul>
+<h1>12. 后续演进</h1>
+<ul>
+<li>多任务队列。</li>
+<li>Architect 自动生成计划。</li>
+<li><code>$team</code> 并行执行。</li>
+<li>可视化 Dashboard。</li>
+<li>Rule Proposal 审核流。</li>
+<li>更细粒度权限沙箱。</li>
+</ul>
+</body>
+</html>

@@ -1,0 +1,42 @@
+{
+  "task_id": "task-docker-hard-check-smoke-001",
+  "title": "Docker hard check smoke",
+  "description": "Run unittest inside Docker sandbox for a minimal Python project. The smoke script rewrites repo_path/worktree_path to .tmp/docker-hard-check-smoke.",
+  "change_type": "bugfix",
+  "repo_path": ".tmp/docker-hard-check-smoke",
+  "worktree_path": ".tmp/docker-hard-check-smoke",
+  "allowed_paths": [
+    "calculator.py",
+    "test_calculator.py"
+  ],
+  "forbidden_paths": [
+    ".env",
+    "secrets",
+    "deploy/prod"
+  ],
+  "allowed_command_prefixes": [
+    "python",
+    "python.exe",
+    "python -m pytest",
+    "pytest"
+  ],
+  "check_commands": {
+    "test": "python -m unittest -q",
+    "lint": null,
+    "typecheck": null
+  },
+  "execution_backend": "docker",
+  "sandbox": {
+    "image": "python:3.12-slim",
+    "network": "none",
+    "worktree_mount": "readonly",
+    "memory_limit": "1g",
+    "cpu_limit": 1
+  },
+  "agent_mode": "mock",
+  "max_attempts": 1,
+  "max_review_json_retries": 1,
+  "heartbeat_interval_seconds": 5,
+  "command_timeout_seconds": 120,
+  "risk_level": "low"
+}

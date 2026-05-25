@@ -1,0 +1,20 @@
+{
+  "task_id": "task-real-checks-001",
+  "title": "Real checks smoke task",
+  "description": "Use ShellCheckRunner to run the local pytest suite.",
+  "change_type": "bugfix",
+  "repo_path": ".",
+  "worktree_path": ".",
+  "allowed_paths": ["orchestrator", "tests", "examples", ".omx"],
+  "forbidden_paths": [".env", "secrets", "deploy/prod"],
+  "check_commands": {
+    "test": "python -m pytest -q tests",
+    "lint": null,
+    "typecheck": null
+  },
+  "max_attempts": 2,
+  "max_review_json_retries": 2,
+  "heartbeat_interval_seconds": 30,
+  "command_timeout_seconds": 120,
+  "risk_level": "medium"
+}

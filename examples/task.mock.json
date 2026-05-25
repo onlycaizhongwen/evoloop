@@ -1,0 +1,19 @@
+{
+  "task_id": "task-001",
+  "title": "Mock bugfix task",
+  "description": "Use mock adapters to verify the orchestrator loop.",
+  "change_type": "bugfix",
+  "repo_path": ".",
+  "worktree_path": ".",
+  "allowed_paths": ["orchestrator", "tests", "examples", ".omx"],
+  "forbidden_paths": [".env", "secrets", "deploy/prod"],
+  "check_commands": {
+    "test": "pytest",
+    "lint": null,
+    "typecheck": null
+  },
+  "max_attempts": 3,
+  "max_review_json_retries": 2,
+  "heartbeat_interval_seconds": 30,
+  "risk_level": "medium"
+}

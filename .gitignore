@@ -1,0 +1,11 @@
+.ai/logs/
+.omx/
+.tmp/
+.npm-cache/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+*.pyo
+*.log
+.DS_Store
+Thumbs.db

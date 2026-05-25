@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="refresh" content="3">
+  <title>任务运行中</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="shell narrow">
+    <header class="topbar">
+      <div>
+        <a href="/" class="back">返回首页</a>
+        <h1>任务已提交</h1>
+        <p>{{ job_id }}</p>
+      </div>
+    </header>
+
+    <section class="hero-status {% if job.status == 'failed' %}danger{% else %}info{% endif %}">
+      <div>
+        <p class="eyebrow">当前状态</p>
+        <h2>{% if job.status == "failed" %}启动失败{% else %}OMX/Codex 正在执行{% endif %}</h2>
+        <p>{{ job.message }}</p>
+      </div>
+      <div class="next-action">
+        <strong>下一步</strong>
+        <span>页面每 3 秒自动刷新。真实模型执行时不要重复点击提交按钮。</span>
+      </div>
+    </section>
+
+    <section class="summary-grid two">
+      <div class="metric">
+        <span>任务文件</span>
+        <strong>{{ job.task_path }}</strong>
+      </div>
+      <div class="metric">
+        <span>运行编号</span>
+        <strong>{{ run_id or "创建中" }}</strong>
+      </div>
+    </section>
+
+    {% if progress %}
+    <section class="panel">
+      <div class="section-title">
+        <div>
+          <p class="eyebrow">实时进度</p>
+          <h2>运行心跳</h2>
+        </div>
+        <a class="button secondary" href="/runs/{{ run_id }}">查看运行详情</a>
+      </div>
+      <div class="summary-grid two">
+        <div class="metric">
+          <span>状态</span>
+          <strong>{{ progress.status }}</strong>
+        </div>
+        <div class="metric">
+          <span>阶段</span>
+          <strong>{{ progress.phase }}</strong>
+        </div>
+        <div class="metric">
+          <span>尝试次数</span>
+          <strong>{{ progress.attempt }}</strong>
+        </div>
+        <div class="metric">
+          <span>最后心跳</span>
+          <strong>{{ progress.last_heartbeat_at or progress.updated_at }}</strong>
+        </div>
+      </div>
+      {% if progress.heartbeat %}
+      <div class="log-block compact">
+        <h3>最近心跳</h3>
+        <pre>{{ progress.heartbeat }}</pre>
+      </div>
+      {% endif %}
+      {% if progress.phase_log %}
+      <div class="log-block compact">
+        <h3>最近阶段日志</h3>
+        <pre>{{ progress.phase_log }}</pre>
+      </div>
+      {% endif %}
+    </section>
+    {% else %}
+    <section class="panel">
+      <p class="eyebrow">实时进度</p>
+      <h2>等待 Orchestrator 创建 run 目录</h2>
+      <p class="muted">后台线程已经启动。生成 run_state.json 后，这里会显示阶段、尝试次数和心跳日志。</p>
+    </section>
+    {% endif %}
+  </main>
+</body>
+</html>

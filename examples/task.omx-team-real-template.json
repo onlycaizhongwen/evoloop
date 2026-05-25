@@ -1,0 +1,36 @@
+{
+  "task_id": "task-omx-team-real-001",
+  "title": "Real OMX team patch template",
+  "description": "Use OMX exec as the team backend. Return team_result JSON only; Orchestrator validates and applies the embedded patch_plan.",
+  "change_type": "bugfix",
+  "repo_path": ".tmp/omx-unified-diff-smoke",
+  "worktree_path": ".tmp/omx-unified-diff-smoke",
+  "allowed_paths": [
+    "calculator.py"
+  ],
+  "forbidden_paths": [
+    ".env",
+    "secrets",
+    "deploy/prod"
+  ],
+  "allowed_command_prefixes": [
+    "python",
+    "python.exe",
+    "python -m pytest",
+    "pytest"
+  ],
+  "check_commands": {
+    "test": "python -m pytest -q",
+    "lint": null,
+    "typecheck": null
+  },
+  "agent_mode": "omx_team_patch",
+  "agent_commands": {
+    "patch_coder": "python \"D:/czw_ai_project/自进化编程/scripts/run_omx_team_patch.py\" {task_id} {prompt_file} {run_dir}"
+  },
+  "max_attempts": 2,
+  "max_review_json_retries": 1,
+  "heartbeat_interval_seconds": 10,
+  "command_timeout_seconds": 240,
+  "risk_level": "medium"
+}

@@ -1,0 +1,26 @@
+{
+  "task_id": "task-shell-agent-001",
+  "title": "Shell agent smoke task",
+  "description": "Use ShellAgent reviewer command and real pytest checks.",
+  "change_type": "bugfix",
+  "repo_path": ".",
+  "worktree_path": ".",
+  "allowed_paths": ["orchestrator", "tests", "examples", ".omx"],
+  "forbidden_paths": [".env", "secrets", "deploy/prod"],
+  "check_commands": {
+    "test": "python -m pytest -q tests",
+    "lint": null,
+    "typecheck": null
+  },
+  "agent_mode": "shell",
+  "agent_commands": {
+    "coder": null,
+    "fixer": null,
+    "reviewer": "python examples/shell_reviewer.py {task_id}"
+  },
+  "max_attempts": 2,
+  "max_review_json_retries": 2,
+  "heartbeat_interval_seconds": 30,
+  "command_timeout_seconds": 120,
+  "risk_level": "medium"
+}

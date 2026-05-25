@@ -1,0 +1,320 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>自动循环进化编码智能体系统 - MVP 实施计划</title>
+<style>
+@page { size: A4; margin: 18mm 18mm 18mm 18mm; }
+body {
+  font-family: "Microsoft YaHei", "SimSun", Arial, sans-serif;
+  color: #1f2933;
+  line-height: 1.42;
+  font-size: 10.5px;
+}
+.cover {
+  text-align: center;
+  padding: 18px 0 16px;
+  border-bottom: 3px solid #1f4e79;
+  margin-bottom: 16px;
+}
+.cover h1 {
+  color: #1f4e79;
+  font-size: 24px;
+  margin: 0 0 7px;
+  letter-spacing: 0;
+}
+.cover .subtitle {
+  color: #5b6670;
+  font-size: 13px;
+}
+h1 {
+  color: #1f4e79;
+  font-size: 17px;
+  border-bottom: 1px solid #d7e3ef;
+  padding-bottom: 4px;
+  margin-top: 18px;
+}
+h2 {
+  color: #2f5597;
+  font-size: 13.5px;
+  margin-top: 14px;
+}
+h3 {
+  color: #374151;
+  font-size: 11.5px;
+  margin-top: 11px;
+}
+p { margin: 4px 0; }
+ul, ol { margin-top: 3px; margin-bottom: 6px; }
+li { margin: 2px 0; }
+code {
+  font-family: Consolas, "Courier New", monospace;
+  color: #b23b3b;
+  background: #f7f7f7;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+pre {
+  background: #f6f8fa;
+  border: 1px solid #d9e2ec;
+  border-left: 4px solid #2f5597;
+  padding: 7px 9px;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 8.5px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 11px;
+  font-size: 9.5px;
+}
+th {
+  background: #d9eaf7;
+  color: #1f2933;
+  font-weight: 700;
+}
+th, td {
+  border: 1px solid #aebfd0;
+  padding: 4px 5px;
+  vertical-align: top;
+}
+tr:nth-child(even) td { background: #fbfdff; }
+.diagram {
+  margin: 14px 0 16px;
+  text-align: center;
+  page-break-inside: avoid;
+}
+.diagram img {
+  max-width: 94%;
+  border: 1px solid #d7e3ef;
+  box-shadow: 0 2px 8px rgba(31, 78, 121, 0.12);
+}
+.diagram-title {
+  color: #5b6670;
+  font-size: 9.5px;
+  margin-top: 5px;
+}
+.slide {
+  page-break-inside: avoid;
+  border-left: 5px solid #1f4e79;
+  padding-left: 14px;
+}
+</style>
+</head>
+<body>
+<div class="cover">
+  <h1>自动循环进化编码智能体系统</h1>
+  <div class="subtitle">MVP 实施计划</div>
+</div>
+<div class="diagram"><img src="file:///D:/czw_ai_project/%E8%87%AA%E8%BF%9B%E5%8C%96%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE%E5%B7%A5%E7%A8%8B%E6%96%87%E6%A1%A3/assets/roadmap.png" alt="图 1：MVP 实施路线图"><div class="diagram-title">图 1：MVP 实施路线图</div></div>
+<div class="diagram"><img src="file:///D:/czw_ai_project/%E8%87%AA%E8%BF%9B%E5%8C%96%E7%BC%96%E7%A8%8B/%E9%A1%B9%E7%9B%AE%E5%B7%A5%E7%A8%8B%E6%96%87%E6%A1%A3/assets/workflow.png" alt="图 2：MVP 闭环验证流程"><div class="diagram-title">图 2：MVP 闭环验证流程</div></div>
+<h1>自动循环进化编码智能体系统 - MVP 实施计划</h1>
+<h1>1. 目标</h1>
+<p>基于 V7 技术方案，实现一个可运行的单任务自动循环 MVP。MVP 重点验证自动编码、Hard Check、Reviewer JSON、质量门控、安全策略、状态持久化和人工介入报告。</p>
+<h1>2. 前置条件</h1>
+<ul>
+<li>已确定 V7 架构设计。</li>
+<li>已具备 Codex CLI 或可替代 Agent 调用方式。</li>
+<li>目标项目具备至少一个测试命令。</li>
+<li>能在本地工作区创建运行产物目录。</li>
+<li>用户接受 MVP 暂不实现多 Agent 并行和自动 PR。</li>
+</ul>
+<h1>3. 里程碑</h1>
+<table>
+<tr><th>阶段</th><th>目标</th><th>产物</th></tr>
+<tr><td>M1</td><td>CLI 骨架和任务读取</td><td><code>main.py</code>、<code>task.json</code> 校验</td></tr>
+<tr><td>M2</td><td>安全策略和状态持久化</td><td><code>safety.py</code>、<code>state.py</code></td></tr>
+<tr><td>M3</td><td>Hard Check 与短路</td><td><code>checks.py</code>、hard check report</td></tr>
+<tr><td>M4</td><td>Reviewer JSON 解析</td><td><code>review.py</code>、malformed JSON 重试</td></tr>
+<tr><td>M5</td><td>Quality Gate</td><td><code>gate.py</code>、<code>quality_report.json</code></td></tr>
+<tr><td>M6</td><td>Agent Adapter</td><td><code>agent_adapter.py</code> 接入 Codex/OMX</td></tr>
+<tr><td>M7</td><td>最终报告和候选规则</td><td><code>final_report.md</code>、pending rule</td></tr>
+</table>
+<h1>4. 实施步骤</h1>
+<h2>Step 1: Orchestrator CLI 骨架</h2>
+<p>内容：</p>
+<ul>
+<li>创建 <code>orchestrator/main.py</code>。</li>
+<li>支持传入 <code>task.json</code> 路径。</li>
+<li>初始化 <code>run_id</code>。</li>
+<li>创建 <code>.omx/runs/{run_id}/</code>。</li>
+<li>配置日志格式和 heartbeat 参数。</li>
+</ul>
+<p>验收：</p>
+<ul>
+<li>能读取任务文件。</li>
+<li>能创建运行目录。</li>
+<li>能输出 phase 日志。</li>
+</ul>
+<h2>Step 2: task.json 校验</h2>
+<p>内容：</p>
+<ul>
+<li>定义任务模型。</li>
+<li>校验 <code>change_type</code> 是否为 <code>feature | bugfix | refactor | config</code>。</li>
+<li>校验 <code>max_attempts</code>、<code>max_review_json_retries</code>、<code>heartbeat_interval_seconds</code>。</li>
+<li>校验路径字段。</li>
+</ul>
+<p>验收：</p>
+<ul>
+<li>缺少必要字段时失败。</li>
+<li>非法 <code>change_type</code> 时失败。</li>
+<li>合法任务能进入下一步。</li>
+</ul>
+<h2>Step 3: 安全策略</h2>
+<p>内容：</p>
+<ul>
+<li>实现 <code>allowed_paths</code> 和 <code>forbidden_paths</code> 检查。</li>
+<li>实现权限等级：read-only、workspace-write、elevated、forbidden。</li>
+<li>实现 <code>change_type=config</code> 权限映射。</li>
+<li>实现 forbidden 优先。</li>
+</ul>
+<p>验收：</p>
+<ul>
+<li>命中 forbidden 时直接 halt。</li>
+<li>config 类型未命中 forbidden 时映射 elevated。</li>
+<li>日志记录 <code>reason=change_type_config_requires_elevated</code>。</li>
+</ul>
+<h2>Step 4: State Store</h2>
+<p>内容：</p>
+<ul>
+<li>定义 <code>run_state.json</code>。</li>
+<li>每个阶段更新 <code>current_phase</code>。</li>
+<li>每次 heartbeat 更新 <code>last_heartbeat_at</code>。</li>
+<li>每次 attempt 保存产物。</li>
+</ul>
+<p>验收：</p>
+<ul>
+<li>中途失败仍能看到当前阶段和最近产物。</li>
+<li>attempt 目录按序创建。</li>
+</ul>
+<h2>Step 5: Check Runner</h2>
+<p>内容：</p>
+<ul>
+<li>执行 <code>task.check_commands.test</code>。</li>
+<li>执行 lint 和 typecheck。</li>
+<li>捕获退出码、stdout、stderr、耗时。</li>
+<li>长命令输出 heartbeat。</li>
+</ul>
+<p>验收：</p>
+<ul>
+<li>测试失败能生成 hard check report。</li>
+<li>Hard Check 失败不会调用 Reviewer。</li>
+<li>Hard Check 成功才进入 Review。</li>
+</ul>
+<h2>Step 6: Review Parser</h2>
+<p>内容：</p>
+<ul>
+<li>调用 Reviewer Agent。</li>
+<li>提取 JSON。</li>
+<li>校验 Schema。</li>
+<li>校验 <code>review.task_id == task.task_id</code>。</li>
+<li>malformed JSON 或 task_id 不匹配时最多重试 2 次。</li>
+<li>保存 <code>malformed_review_*.txt</code>。</li>
+</ul>
+<p>验收：</p>
+<ul>
+<li>非法 JSON 能重试。</li>
+<li>task_id 不匹配能重试。</li>
+<li>超过重试次数能 halt。</li>
+</ul>
+<h2>Step 7: Quality Gate</h2>
+<p>内容：</p>
+<ul>
+<li>实现综合评分。</li>
+<li>实现 Diff 风险评分。</li>
+<li>根据 <code>change_type</code> 处理测试覆盖扣分。</li>
+<li>输出 done/retry/halt。</li>
+</ul>
+<p>验收：</p>
+<ul>
+<li>分数低于 80 时 retry。</li>
+<li>blocking issue 时 retry 或 halt。</li>
+<li>critical issue 时 halt。</li>
+<li>refactor 不因源码改但测试未改扣分。</li>
+</ul>
+<h2>Step 8: Agent Adapter</h2>
+<p>内容：</p>
+<ul>
+<li>封装 Coder 调用。</li>
+<li>封装 Fixer 调用。</li>
+<li>封装 Reviewer 调用。</li>
+<li>MVP 可以先用命令行适配层，后续替换为 OMX。</li>
+</ul>
+<p>验收：</p>
+<ul>
+<li>Orchestrator 不直接依赖具体 CLI 细节。</li>
+<li>Agent 输出可被记录。</li>
+</ul>
+<h2>Step 9: Final Report</h2>
+<p>内容：</p>
+<ul>
+<li>输出最终状态。</li>
+<li>输出尝试次数。</li>
+<li>输出质量分。</li>
+<li>输出失败原因或完成摘要。</li>
+<li>输出人工介入建议。</li>
+</ul>
+<p>验收：</p>
+<ul>
+<li>done 时报告可用于交付。</li>
+<li>halt 时报告可用于人工接手。</li>
+</ul>
+<h2>Step 10: Pending Rule Proposal</h2>
+<p>内容：</p>
+<ul>
+<li>从失败日志或重复错误生成候选规则。</li>
+<li>写入 <code>pending-rules/</code>。</li>
+<li>不自动写入正式 Skill。</li>
+</ul>
+<p>验收：</p>
+<ul>
+<li>候选规则包含来源、证据、适用范围和审核状态。</li>
+</ul>
+<h1>5. 验证方式</h1>
+<h2>5.1 正向验证</h2>
+<ul>
+<li>输入一个简单 bugfix 任务。</li>
+<li>Coder 修改代码。</li>
+<li>测试通过。</li>
+<li>Reviewer 输出合法 JSON。</li>
+<li>Quality Gate 通过。</li>
+<li>输出 final report。</li>
+</ul>
+<h2>5.2 失败验证</h2>
+<ul>
+<li>构造测试失败，确认 Reviewer 被短路。</li>
+<li>构造非法 Review JSON，确认重试。</li>
+<li>构造 task_id 不匹配，确认重试。</li>
+<li>构造 forbidden path，确认阻断。</li>
+<li>构造 config 任务，确认 elevated 映射。</li>
+</ul>
+<h1>6. 风险与回滚</h1>
+<table>
+<tr><th>风险</th><th>应对</th><th>回滚</th></tr>
+<tr><td>Agent 命令不可用</td><td>Adapter 先支持 mock 模式</td><td>回退到 mock 测试</td></tr>
+<tr><td>测试命令耗时过长</td><td>heartbeat 和超时配置</td><td>手动停止进程</td></tr>
+<tr><td>JSON 解析不稳定</td><td>重试和模板提示</td><td>halt 并人工接手</td></tr>
+<tr><td>安全策略误杀</td><td>输出阻断原因</td><td>调整 task 配置</td></tr>
+<tr><td>自动修复反复失败</td><td>max attempts</td><td>输出 final report</td></tr>
+</table>
+<h1>7. 检查点</h1>
+<ul>
+<li>Checkpoint 1：CLI 能读任务并生成 run_state。</li>
+<li>Checkpoint 2：Hard Check 短路可用。</li>
+<li>Checkpoint 3：Reviewer JSON 重试可用。</li>
+<li>Checkpoint 4：Quality Gate 可用。</li>
+<li>Checkpoint 5：真实 bugfix demo 跑通。</li>
+</ul>
+<h1>8. 不在 MVP 内的事项</h1>
+<ul>
+<li>多 Agent 并行。</li>
+<li>自动 PR。</li>
+<li>Web Dashboard。</li>
+<li>自动写正式 Skill。</li>
+<li>跨仓库任务。</li>
+<li>生产环境操作。</li>
+</ul>
+</body>
+</html>

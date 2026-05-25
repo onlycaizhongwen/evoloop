@@ -1,0 +1,98 @@
+{
+  "schema_version": "1.0",
+  "task_id": "task-omx-team-patch-001",
+  "status": "completed",
+  "roles": {
+    "planner": {
+      "status": "completed",
+      "artifact": "team_plan.json",
+      "summary": "Use a narrow single-file patch and keep tests unchanged because the existing test already covers add()."
+    },
+    "coder": {
+      "status": "completed",
+      "artifact": "patch_plan.json",
+      "summary": "Generated a replace_text patch for calculator.py."
+    },
+    "reviewer": {
+      "status": "completed",
+      "artifact": "review.json",
+      "summary": "Patch is scoped to the allowed file and fixes the intended behavior."
+    },
+    "tester": {
+      "status": "completed",
+      "artifact": "test_recommendation.json",
+      "summary": "Run python -m pytest -q in the target worktree."
+    },
+    "gatekeeper": {
+      "status": "completed",
+      "artifact": "gate_advice.json",
+      "summary": "Safe to pass to Orchestrator patch approval and quality gate."
+    },
+    "fixer": {
+      "status": "skipped",
+      "artifact": null,
+      "summary": "No fixer needed because reviewer passed."
+    }
+  },
+  "artifacts": {
+    "team_plan": {
+      "schema_version": "1.0",
+      "task_id": "task-omx-team-patch-001",
+      "steps": [
+        "Inspect calculator.py intent from allowed context.",
+        "Generate a single replace_text patch.",
+        "Review the patch against allowed paths and task intent.",
+        "Recommend pytest as the post-apply hard check."
+      ],
+      "risks": [
+        "Patch must not touch files outside allowed_paths.",
+        "Team output must remain structured JSON only."
+      ]
+    },
+    "patch_plan": {
+      "schema_version": "1.0",
+      "task_id": "task-omx-team-patch-001",
+      "summary": "Replace subtraction with addition.",
+      "operations": [
+        {
+          "op": "replace_text",
+          "path": "calculator.py",
+          "old": "return a - b",
+          "new": "return a + b"
+        }
+      ]
+    },
+    "review": {
+      "schema_version": "1.0",
+      "task_id": "task-omx-team-patch-001",
+      "pass": true,
+      "confidence": 90,
+      "summary": "Patch is scoped, readable, and matches the requested bug fix.",
+      "issues": [],
+      "blocking": false,
+      "recommended_next_action": "pass"
+    },
+    "test_recommendation": {
+      "schema_version": "1.0",
+      "task_id": "task-omx-team-patch-001",
+      "commands": [
+        "python -m pytest -q"
+      ],
+      "notes": [
+        "Run after Orchestrator applies the pending patch."
+      ]
+    },
+    "gate_advice": {
+      "schema_version": "1.0",
+      "task_id": "task-omx-team-patch-001",
+      "recommended_next_action": "orchestrator_quality_gate",
+      "confidence": 90,
+      "reasons": [
+        "Single allowed file touched.",
+        "No delete operation.",
+        "Existing tests should cover the behavior."
+      ]
+    }
+  },
+  "diagnostics": []
+}

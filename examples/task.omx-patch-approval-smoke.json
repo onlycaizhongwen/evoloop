@@ -1,0 +1,38 @@
+﻿{
+    "task_id":  "task-omx-patch-approval-smoke-001",
+    "title":  "OMX patch approval smoke",
+    "description":  "Return a delete_file patch. It must be written to pending-patches and not auto-applied.",
+    "change_type":  "bugfix",
+    "repo_path":  ".tmp/omx-real-smoke",
+    "worktree_path":  ".tmp/omx-real-smoke",
+    "allowed_paths":  [
+                          "old_file.py"
+                      ],
+    "forbidden_paths":  [
+                            ".env",
+                            "secrets",
+                            "deploy/prod"
+                        ],
+    "allowed_command_prefixes":  [
+                                     "python",
+                                     "python -m pytest"
+                                 ],
+    "check_commands":  {
+                           "test":  null,
+                           "lint":  null,
+                           "typecheck":  null
+                       },
+    "agent_mode":  "omx_patch",
+    "agent_commands":  {
+                           "patch_coder":  "python \"D:/czw_ai_project/自进化编程/examples/patch_delete_backend.py\" {task_id}",
+                           "reviewer":  "python \"D:/czw_ai_project/自进化编程/examples/shell_reviewer.py\" {task_id}"
+                       },
+    "patch_auto_apply":  true,
+    "patch_approval_risk_threshold":  7,
+    "patch_require_approval_on_delete":  true,
+    "max_attempts":  1,
+    "max_review_json_retries":  1,
+    "heartbeat_interval_seconds":  10,
+    "command_timeout_seconds":  120,
+    "risk_level":  "medium"
+}

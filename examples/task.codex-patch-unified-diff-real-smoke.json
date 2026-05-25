@@ -1,0 +1,36 @@
+{
+  "task_id": "task-codex-patch-unified-diff-real-smoke-001",
+  "title": "Codex real patch-only unified diff smoke",
+  "description": "Environment-dependent smoke. Use a real Codex backend command to return patch JSON with a unified_diff operation that changes calculator.add to return a + b. Do not edit files directly. Return only JSON.",
+  "change_type": "bugfix",
+  "repo_path": ".tmp/omx-unified-diff-smoke",
+  "worktree_path": ".tmp/omx-unified-diff-smoke",
+  "allowed_paths": [
+    "calculator.py"
+  ],
+  "forbidden_paths": [
+    ".env",
+    "secrets",
+    "deploy/prod"
+  ],
+  "allowed_command_prefixes": [
+    "python",
+    "python -m pytest"
+  ],
+  "check_commands": {
+    "test": "python -m pytest -q",
+    "lint": null,
+    "typecheck": null
+  },
+  "agent_mode": "omx_patch",
+  "agent_commands": {
+    "patch_coder": "python \"D:/czw_ai_project/自进化编程/scripts/run_external_agent.py\" --runtime codex --role coder --task-id {task_id} --prompt-file {prompt_file} --run-dir {run_dir} --worktree \"D:/czw_ai_project/自进化编程/.tmp/omx-unified-diff-smoke\" --stdin-prompt --output-last-message {attempt_dir}/codex_unified_diff_patch_coder_last_message.txt",
+    "patch_fixer": "python \"D:/czw_ai_project/自进化编程/scripts/run_external_agent.py\" --runtime codex --role fixer --task-id {task_id} --prompt-file {prompt_file} --reason-file {reason_file} --run-dir {run_dir} --worktree \"D:/czw_ai_project/自进化编程/.tmp/omx-unified-diff-smoke\" --stdin-prompt --output-last-message {attempt_dir}/codex_unified_diff_patch_fixer_last_message.txt",
+    "reviewer": "python \"D:/czw_ai_project/自进化编程/examples/shell_reviewer.py\" {task_id}"
+  },
+  "max_attempts": 2,
+  "max_review_json_retries": 1,
+  "heartbeat_interval_seconds": 10,
+  "command_timeout_seconds": 240,
+  "risk_level": "medium"
+}

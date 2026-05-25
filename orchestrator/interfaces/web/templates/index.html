@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Auto Evolution Orchestrator</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <h1>Auto Evolution Orchestrator</h1>
+        <p>OMX 负责编排智能体，Codex 负责生成补丁，Orchestrator 负责审批、应用和验证。</p>
+      </div>
+    </header>
+
+    <section class="hero-status info">
+      <div>
+        <p class="eyebrow">推荐主线</p>
+        <h2>OMX Team -> Codex -> Patch JSON</h2>
+        <p>模型只输出结构化 JSON；真实写文件、审批、测试和质量门禁都由 Orchestrator 控制。</p>
+      </div>
+      <div class="next-action">
+        <strong>建议操作</strong>
+        <span>先运行右侧示例，再用左侧表单提交自己的任务。</span>
+      </div>
+    </section>
+
+    <section class="grid">
+      <form class="panel" method="post" action="/tasks/run">
+        <h2>新建任务</h2>
+        {% if form.errors %}
+        <div class="alert danger">
+          <strong>提交前校验未通过</strong>
+          <ul>
+            {% for error in form.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
+        <label>Task ID <input name="task_id" value="{{ form.task_id }}" required></label>
+        <label>标题 <input name="title" value="{{ form.title }}" required></label>
+        <label>描述 <textarea name="description" rows="5" required>{{ form.description }}</textarea></label>
+
+        <div class="row">
+          <label>类型
+            <select name="change_type">
+              {% for option in ["bugfix", "feature", "refactor", "config"] %}
+              <option value="{{ option }}" {% if form.change_type == option %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Agent
+            <select name="agent_mode">
+              <option value="omx_team_patch" {% if form.agent_mode == "omx_team_patch" %}selected{% endif %}>omx_team_patch：OMX team 编排</option>
+              <option value="omx_patch" {% if form.agent_mode == "omx_patch" %}selected{% endif %}>omx_patch：单智能体补丁模式</option>
+              <option value="omx" {% if form.agent_mode == "omx" %}selected{% endif %}>omx：直接执行模式</option>
+              <option value="codex" {% if form.agent_mode == "codex" %}selected{% endif %}>codex：直调模式</option>
+              <option value="shell" {% if form.agent_mode == "shell" %}selected{% endif %}>shell：本地脚本模式</option>
+              <option value="mock" {% if form.agent_mode == "mock" %}selected{% endif %}>mock：流程演示</option>
+            </select>
+          </label>
+        </div>
+
+        <label>Worktree <input name="worktree_path" value="{{ form.worktree_path }}" required></label>
+        <label>Allowed paths <textarea name="allowed_paths" rows="3">{{ form.allowed_paths }}</textarea></label>
+
+        <div class="row">
+          <label>Execution backend
+            <select name="execution_backend">
+              <option value="local" {% if form.execution_backend == "local" %}selected{% endif %}>local</option>
+              <option value="docker" {% if form.execution_backend == "docker" %}selected{% endif %}>docker</option>
+            </select>
+          </label>
+          <label>Docker image <input name="sandbox_image" value="{{ form.sandbox_image }}"></label>
+        </div>
+
+        <div class="row">
+          <label>Docker network
+            <select name="sandbox_network">
+              {% for option in ["none", "bridge"] %}
+              <option value="{{ option }}" {% if form.sandbox_network == option %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Worktree mount
+            <select name="sandbox_worktree_mount">
+              {% for option in ["readonly", "rw"] %}
+              <option value="{{ option }}" {% if form.sandbox_worktree_mount == option %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+
+        <div class="row">
+          <label>Memory limit <input name="sandbox_memory_limit" value="{{ form.sandbox_memory_limit }}"></label>
+          <label>CPU limit <input name="sandbox_cpu_limit" value="{{ form.sandbox_cpu_limit }}"></label>
+        </div>
+        <p class="empty">Docker commands should use /worktree, /run, /cache, or placeholders like {prompt_file}; host absolute paths are rejected.</p>
+
+        <label>Test command <input name="check_command" value="{{ form.check_command }}"></label>
+        <label>Patch coder / Team command <input name="patch_coder" value='{{ form.patch_coder }}'></label>
+        <label>Patch fixer <input name="patch_fixer" value='{{ form.patch_fixer }}'></label>
+        <label>Reviewer <input name="reviewer" value='{{ form.reviewer }}'></label>
+        <label class="check"><input type="checkbox" name="real_checks" {% if form.real_checks %}checked{% endif %}> 运行真实检查</label>
+        <button type="submit">提交任务</button>
+      </form>
+
+      <aside class="stack">
+        <form class="panel" method="post" action="/examples/run">
+          <h2>运行示例</h2>
+          <label>Task
+            <select name="task_path">
+              {% for item in examples %}
+              <option value="{{ item }}">{{ item }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <div class="row">
+            <label>Agent <input name="agent_mode" value="omx_team_patch"></label>
+            <label class="check"><input type="checkbox" name="real_checks" checked> 真实检查</label>
+          </div>
+          <button type="submit">运行示例</button>
+        </form>
+
+        <section class="panel">
+          <h2>最近 Jobs</h2>
+          <div class="list">
+            {% for job in jobs %}
+            <a class="item" href="/jobs/{{ job.job_id }}">
+              <strong>{{ job.job_id }}</strong>
+              <span>{{ job.status }} / {{ job.run_id or "等待 run_id" }}</span>
+            </a>
+            {% else %}
+            <p class="empty">暂无异步任务</p>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>最近 Runs</h2>
+          <div class="list">
+            {% for run in runs %}
+            <a class="item" href="/runs/{{ run.run_id }}">
+              <strong>{{ run.run_id }}</strong>
+              <span>{{ run.task_id }} / {{ run.status }} / {{ run.phase }}</span>
+            </a>
+            {% else %}
+            <p class="empty">暂无运行记录</p>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Patch 审计</h2>
+          <div class="list">
+            {% for patch in patches %}
+            <a class="item" href="/runs/{{ patch.run_id }}">
+              <strong>{{ patch.patch }}</strong>
+              <span>{{ patch.status }} / {{ patch.ops }} / checks={{ patch.checks_status }} / rerun={{ patch.rerun_status }}</span>
+            </a>
+            {% else %}
+            <p class="empty">暂无 Patch</p>
+            {% endfor %}
+          </div>
+        </section>
+      </aside>
+    </section>
+  </main>
+</body>
+</html>
