@@ -17,6 +17,15 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from orchestrator.application.dto.run_task_command import RunTaskCommand
+from orchestrator.application.task_template_registry import (
+    DEFAULT_TEMPLATE_ID,
+    get_command_preset,
+    get_task_template_form,
+    get_task_template_summary,
+    list_command_presets,
+    list_task_templates,
+    normalize_template_id,
+)
 from orchestrator.domain.enums import RunStatus
 from orchestrator.infrastructure.patches.pending_patch_service import PendingPatchService
 from orchestrator.infrastructure.persistence.file_state_repository import FileStateRepository
@@ -38,34 +47,6 @@ ALLOWED_DOCKER_WORKTREE_MOUNTS = {"readonly", "rw"}
 MEMORY_LIMIT_PATTERN = re.compile(r"^\d+(?:\.\d+)?[kKmMgG]?$")
 WINDOWS_ABSOLUTE_PATH_PATTERN = re.compile(r"(^|[\s\"'])([A-Za-z]:[\\/][^\s\"']*)")
 ALLOWED_DOCKER_ABSOLUTE_PATH_PREFIXES = ("/worktree", "/run", "/cache")
-DOCKER_AGENT_COMMAND_PRESETS = {
-    "custom": {
-        "label": "Custom commands",
-        "description": "Keep the command fields as entered.",
-        "agent_modes": sorted(ALLOWED_AGENT_MODES),
-        "commands": None,
-    },
-    "team_patch_backend": {
-        "label": "Docker team_result backend",
-        "description": "Run the default worktree backend that prints OMX team_result JSON.",
-        "agent_modes": ["omx_team_patch"],
-        "commands": {
-            "patch_coder": "python /worktree/docker_team_backend.py {task_id} {prompt_file}",
-            "patch_fixer": "",
-            "reviewer": "",
-        },
-    },
-    "patch_json_backend": {
-        "label": "Docker patch_plan backend",
-        "description": "Run the default worktree backend that prints patch_plan JSON.",
-        "agent_modes": ["omx_patch"],
-        "commands": {
-            "patch_coder": "python /worktree/patch_backend.py {task_id} {prompt_file}",
-            "patch_fixer": "python /worktree/patch_backend.py {task_id} {prompt_file}",
-            "reviewer": "",
-        },
-    },
-}
 
 app = FastAPI(title="Auto Evolution Orchestrator")
 app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="static")
@@ -73,6 +54,7 @@ app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="stati
 
 @dataclass
 class TaskForm:
+    template_id: str = DEFAULT_TEMPLATE_ID
     task_id: str = "task-omx-team-web-001"
     title: str = "OMX Team Patch 示例任务"
     description: str = (
@@ -100,8 +82,8 @@ class TaskForm:
 
 
 @app.get("/", response_class=HTMLResponse)
-def index(request: Request):
-    return _render_index(request, form=_default_task_form())
+def index(request: Request, template_id: str = DEFAULT_TEMPLATE_ID):
+    return _render_index(request, form=_default_task_form(template_id))
 
 
 @app.post("/tasks/run", response_class=HTMLResponse)
@@ -112,6 +94,7 @@ def run_task(
     description: Annotated[str, Form()],
     change_type: Annotated[str, Form()],
     allowed_paths: Annotated[str, Form()],
+    template_id: Annotated[str, Form()] = DEFAULT_TEMPLATE_ID,
     worktree_path: Annotated[str, Form()] = "",
     check_command: Annotated[str, Form()] = "",
     agent_mode: Annotated[str, Form()] = "omx_team_patch",
@@ -128,6 +111,7 @@ def run_task(
     real_checks: Annotated[bool, Form()] = False,
 ):
     form = TaskForm(
+        template_id=normalize_template_id(template_id),
         task_id=task_id,
         title=title,
         description=description,
@@ -154,30 +138,47 @@ def run_task(
         form.errors = errors
         return _render_index(request, form=form, status_code=422)
 
+    job_id = _create_web_task_and_start(form)
+    return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
+
+
+@app.post("/templates/run", response_class=HTMLResponse)
+def run_template(request: Request, template_id: Annotated[str, Form()] = DEFAULT_TEMPLATE_ID):
+    form = _default_task_form(template_id)
+    errors = _validate_task_form(form)
+    if errors:
+        form.errors = errors
+        return _render_index(request, form=form, status_code=422)
+
+    job_id = _create_web_task_and_start(form)
+    return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
+
+
+def _create_web_task_and_start(form: TaskForm) -> str:
     WEB_TASKS_DIR.mkdir(parents=True, exist_ok=True)
-    safe_worktree_path = _safe_local_path(worktree_path, DEFAULT_SMOKE_WORKTREE)
+    safe_worktree_path = _safe_local_path(form.worktree_path, DEFAULT_SMOKE_WORKTREE)
     _prepare_default_smoke_worktree(safe_worktree_path)
-    task_path = WEB_TASKS_DIR / f"{_safe_id(task_id)}-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.json"
+    task_path = WEB_TASKS_DIR / f"{_safe_id(form.task_id)}-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.json"
     payload = {
-        "task_id": task_id,
-        "title": title,
-        "description": description,
-        "change_type": change_type,
+        "task_id": form.task_id,
+        "title": form.title,
+        "description": form.description,
+        "change_type": form.change_type,
         "repo_path": str(safe_worktree_path),
         "worktree_path": str(safe_worktree_path),
-        "allowed_paths": _lines(allowed_paths),
+        "allowed_paths": _lines(form.allowed_paths),
         "forbidden_paths": [".env", "secrets", "deploy/prod"],
         "allowed_command_prefixes": ["python", "python.exe", "python -m pytest", "pytest"],
-        "execution_backend": execution_backend,
+        "execution_backend": form.execution_backend,
         "sandbox": {
-            "image": sandbox_image,
-            "network": sandbox_network,
-            "worktree_mount": sandbox_worktree_mount,
-            "memory_limit": sandbox_memory_limit,
-            "cpu_limit": float(sandbox_cpu_limit),
+            "image": form.sandbox_image,
+            "network": form.sandbox_network,
+            "worktree_mount": form.sandbox_worktree_mount,
+            "memory_limit": form.sandbox_memory_limit,
+            "cpu_limit": float(form.sandbox_cpu_limit),
         },
-        "check_commands": {"test": check_command or None, "lint": None, "typecheck": None},
-        "agent_mode": agent_mode,
+        "check_commands": {"test": form.check_command or None, "lint": None, "typecheck": None},
+        "agent_mode": form.agent_mode,
         "agent_commands": {
             "patch_coder": form.patch_coder or None,
             "patch_fixer": form.patch_fixer or None,
@@ -188,10 +189,10 @@ def run_task(
         "heartbeat_interval_seconds": 10,
         "command_timeout_seconds": 240,
         "risk_level": "medium",
+        "template_id": form.template_id,
     }
     task_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    job_id = _start_background_run(task_path, agent_mode=agent_mode, real_checks=real_checks)
-    return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
+    return _start_background_run(task_path, agent_mode=form.agent_mode, real_checks=form.real_checks)
 
 
 @app.post("/examples/run")
@@ -218,7 +219,13 @@ def job_status(request: Request, job_id: str):
     return TEMPLATES.TemplateResponse(
         request,
         "job_status.html",
-        {"job": job, "job_id": job_id, "run_id": run_id, "progress": progress},
+        {
+            "job": job,
+            "job_id": job_id,
+            "run_id": run_id,
+            "progress": progress,
+            "task_context": _load_job_task_context(job, run_id),
+        },
     )
 
 
@@ -236,6 +243,7 @@ def run_detail(request: Request, run_id: str):
             "run_id": run_id,
             "run_dir": run_dir,
             "summary": _build_run_summary(state, patches),
+            "task_context": _load_task_context(run_dir),
             "final_report": _read_optional(run_dir / "final_report.md"),
             "agent_log": _read_optional(run_dir / "logs" / "agent.log"),
             "phase_log": _read_optional(run_dir / "logs" / "phase.log"),
@@ -280,15 +288,17 @@ def reject_patch(
 
 
 def _render_index(request: Request, form: TaskForm, status_code: int = 200) -> HTMLResponse:
+    jobs = _load_recent_jobs()
     return TEMPLATES.TemplateResponse(
         request,
         "index.html",
         {
             "runs": _load_runs(),
-            "jobs": _load_recent_jobs(),
+            "jobs": jobs,
             "patches": PendingPatchService().list(),
             "examples": sorted(str(path).replace("\\", "/") for path in Path("examples").glob("task*.json")),
-            "docker_agent_command_presets": _docker_agent_command_presets(),
+            "docker_agent_command_presets": list_command_presets(),
+            "task_templates": _list_task_templates_with_recent_jobs(jobs),
             "project_root": Path.cwd(),
             "form": form,
         },
@@ -296,13 +306,20 @@ def _render_index(request: Request, form: TaskForm, status_code: int = 200) -> H
     )
 
 
-def _default_task_form() -> TaskForm:
-    return TaskForm(
+def _default_task_form(template_id: str = DEFAULT_TEMPLATE_ID) -> TaskForm:
+    selected_template_id = normalize_template_id(template_id)
+    values = get_task_template_form(selected_template_id)
+    form = TaskForm(
+        template_id=selected_template_id,
         worktree_path=str((Path.cwd() / DEFAULT_SMOKE_WORKTREE).resolve()),
         patch_coder=_team_patch_command(),
         patch_fixer="",
         reviewer="",
     )
+    for key, value in values.items():
+        setattr(form, key, value)
+    _apply_command_preset(form)
+    return form
 
 
 def _validate_task_form(form: TaskForm) -> list[str]:
@@ -313,7 +330,7 @@ def _validate_task_form(form: TaskForm) -> list[str]:
         errors.append("类型只能是 feature、bugfix、refactor 或 config。")
     if form.agent_mode not in ALLOWED_AGENT_MODES:
         errors.append("Agent 模式不合法。")
-    preset = DOCKER_AGENT_COMMAND_PRESETS.get(form.command_preset)
+    preset = get_command_preset(form.command_preset)
     if not preset:
         errors.append("Docker agent command preset is not supported.")
     elif form.command_preset != "custom":
@@ -360,26 +377,13 @@ def _validate_task_form(form: TaskForm) -> list[str]:
 
 
 def _apply_command_preset(form: TaskForm) -> None:
-    preset = DOCKER_AGENT_COMMAND_PRESETS.get(form.command_preset)
+    preset = get_command_preset(form.command_preset)
     if not preset or form.command_preset == "custom":
         return
     commands = preset.get("commands") or {}
     form.patch_coder = str(commands.get("patch_coder") or "")
     form.patch_fixer = str(commands.get("patch_fixer") or "")
     form.reviewer = str(commands.get("reviewer") or "")
-
-
-def _docker_agent_command_presets() -> list[dict[str, object]]:
-    return [
-        {
-            "id": preset_id,
-            "label": str(preset["label"]),
-            "description": str(preset["description"]),
-            "agent_modes": ", ".join(preset["agent_modes"]),
-        }
-        for preset_id, preset in DOCKER_AGENT_COMMAND_PRESETS.items()
-    ]
-
 
 def _validate_docker_sandbox(form: TaskForm, errors: list[str]) -> None:
     if not form.sandbox_image.strip():
@@ -514,6 +518,46 @@ def _update_job(job_id: str, **updates: str) -> None:
 
 def _load_recent_jobs() -> list[dict[str, Any]]:
     return [_reconcile_job(job) for job in _job_repository().list_recent(limit=20)]
+
+
+def _list_task_templates_with_recent_jobs(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    recent_by_template: dict[str, dict[str, str]] = {}
+    for job in jobs:
+        template_id = _template_id_from_job(job)
+        if not template_id or template_id in recent_by_template:
+            continue
+        recent_by_template[template_id] = {
+            "job_id": str(job.get("job_id") or ""),
+            "status": str(job.get("status") or ""),
+            "status_class": _status_css_class(str(job.get("status") or "")),
+            "run_id": str(job.get("run_id") or ""),
+            "updated_at": str(job.get("updated_at") or ""),
+        }
+
+    templates: list[dict[str, Any]] = []
+    for template in list_task_templates():
+        item = dict(template)
+        item["recent_job"] = recent_by_template.get(str(template["id"]), {})
+        templates.append(item)
+    return templates
+
+
+def _template_id_from_job(job: dict[str, Any]) -> str:
+    task_path = Path(str(job.get("task_path") or ""))
+    if not task_path.exists():
+        return ""
+    try:
+        task = json.loads(task_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    return normalize_template_id(str(task.get("template_id") or "")) if task.get("template_id") else ""
+
+
+def _status_css_class(status: str) -> str:
+    normalized = status.lower().strip()
+    if normalized in {"done", "failed", "running"}:
+        return normalized
+    return "unknown"
 
 
 def _load_runs() -> list[dict[str, object]]:
@@ -690,6 +734,72 @@ def _load_docker_evidence(run_dir: Path) -> dict[str, object]:
         }
     )
     return evidence
+
+
+def _load_task_context(run_dir: Path) -> dict[str, str]:
+    task_path = run_dir / "task.json"
+    return _load_task_context_from_path(task_path)
+
+
+def _load_job_task_context(job: dict[str, Any], run_id: str | None) -> dict[str, str]:
+    if run_id:
+        run_task_path = RUNS_DIR / run_id / "task.json"
+        if run_task_path.exists():
+            return _load_task_context_from_path(run_task_path)
+    task_path = Path(str(job.get("task_path") or ""))
+    return _load_task_context_from_path(task_path)
+
+
+def _load_task_context_from_path(task_path: Path) -> dict[str, str]:
+    if not task_path.exists():
+        return {
+            "template_id": "",
+            "template_label": "",
+            "template_description": "",
+            "execution_backend": "",
+            "agent_mode": "",
+            "command_preset": "",
+            "worktree_path": "",
+            "allowed_paths": "",
+            "test_command": "",
+        }
+    try:
+        task = json.loads(task_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        task = {}
+    template_id = str(task.get("template_id") or "")
+    template = get_task_template_summary(template_id) if template_id else {"id": "", "label": "", "description": ""}
+    agent_commands = task.get("agent_commands") or {}
+    check_commands = task.get("check_commands") or {}
+    allowed_paths = task.get("allowed_paths") or []
+    if not isinstance(allowed_paths, list):
+        allowed_paths = [str(allowed_paths)]
+    return {
+        "template_id": str(template.get("id") or template_id),
+        "template_label": str(template.get("label") or ""),
+        "template_description": str(template.get("description") or ""),
+        "execution_backend": str(task.get("execution_backend") or ""),
+        "agent_mode": str(task.get("agent_mode") or ""),
+        "command_preset": _infer_command_preset(task),
+        "worktree_path": str(task.get("worktree_path") or task.get("repo_path") or ""),
+        "allowed_paths": ", ".join(str(path) for path in allowed_paths),
+        "test_command": str(check_commands.get("test") or ""),
+        "patch_coder": str(agent_commands.get("patch_coder") or ""),
+    }
+
+
+def _infer_command_preset(task: dict[str, Any]) -> str:
+    task_preset = task.get("command_preset")
+    if task_preset:
+        return str(task_preset)
+    patch_coder = str((task.get("agent_commands") or {}).get("patch_coder") or "")
+    for preset in list_command_presets():
+        preset_id = str(preset["id"])
+        command_preset = get_command_preset(preset_id)
+        commands = (command_preset or {}).get("commands") or {}
+        if patch_coder and patch_coder == str(commands.get("patch_coder") or ""):
+            return preset_id
+    return ""
 
 
 def _tail_last_line(path: Path) -> str:

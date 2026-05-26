@@ -40,6 +40,21 @@
       </div>
     </section>
 
+    <section class="panel">
+      <h2>启动配置</h2>
+      <div class="evidence-grid">
+        <div><span>任务模板</span><strong>{{ task_context.template_label or task_context.template_id or "未记录" }}</strong></div>
+        <div><span>模板 ID</span><strong>{{ task_context.template_id or "未记录" }}</strong></div>
+        <div><span>Execution backend</span><strong>{{ task_context.execution_backend or "未记录" }}</strong></div>
+        <div><span>Agent</span><strong>{{ task_context.agent_mode or "未记录" }}</strong></div>
+        <div><span>Command preset</span><strong>{{ task_context.command_preset or "custom/未记录" }}</strong></div>
+        <div><span>Test command</span><strong>{{ task_context.test_command or "未记录" }}</strong></div>
+      </div>
+      {% if task_context.template_description %}
+      <p class="empty">{{ task_context.template_description }}</p>
+      {% endif %}
+    </section>
+
     {% if progress %}
     <section class="panel">
       <div class="section-title">

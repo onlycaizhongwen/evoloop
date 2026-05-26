@@ -29,6 +29,7 @@
 
     <section class="grid">
       <form class="panel" method="post" action="/tasks/run">
+        <input type="hidden" name="template_id" value="{{ form.template_id }}">
         <h2>新建任务</h2>
         {% if form.errors %}
         <div class="alert danger">
@@ -128,6 +129,53 @@
       </form>
 
       <aside class="stack">
+        <section class="panel">
+          <h2>任务模板</h2>
+          <form method="get" action="/">
+            <label>选择安全模板
+              <select name="template_id" onchange="this.form.submit()">
+                {% for template in task_templates %}
+                <option value="{{ template.id }}" {% if form.template_id == template.id %}selected{% endif %}>
+                  {{ template.label }}
+                </option>
+                {% endfor %}
+              </select>
+            </label>
+            <button type="submit">套用模板</button>
+          </form>
+          <div class="preset-list">
+            {% for template in task_templates %}
+            <div class="preset-item">
+              <div class="template-title">
+                <strong>{{ template.label }}</strong>
+                <span class="badge-row">
+                  {% for badge in template.badges %}
+                  <span class="badge">{{ badge }}</span>
+                  {% endfor %}
+                </span>
+              </div>
+              <span>{{ template.description }}</span>
+              <div class="template-meta">
+                <span>Backend: {{ template.execution_backend }}</span>
+                <span>Agent: {{ template.agent_mode }}</span>
+                <span>Preset: {{ template.command_preset }}</span>
+                <span>Checks: {{ template.check_command or "off" }}</span>
+                <span>Paths: {{ template.allowed_paths }}</span>
+              </div>
+              {% if template.recent_job %}
+              <a class="template-recent {{ template.recent_job.status_class }}" href="/jobs/{{ template.recent_job.job_id }}">
+                Recent: {{ template.recent_job.status }}{% if template.recent_job.run_id %} / {{ template.recent_job.run_id }}{% endif %}
+              </a>
+              {% endif %}
+              <form class="template-run-form" method="post" action="/templates/run">
+                <input type="hidden" name="template_id" value="{{ template.id }}">
+                <button type="submit" class="secondary">直接运行</button>
+              </form>
+            </div>
+            {% endfor %}
+          </div>
+        </section>
+
         <section class="panel quickstart">
           <h2>Docker Agent 快速上手</h2>
           <div class="steps">

@@ -30,12 +30,29 @@ def test_web_index_renders(monkeypatch, tmp_path: Path):
 
 def test_job_status_reads_persisted_job(monkeypatch, tmp_path: Path):
     monkeypatch.chdir(tmp_path)
+    task_path = tmp_path / ".omx" / "web-tasks" / "task-job-context.json"
+    task_path.parent.mkdir(parents=True)
+    task_path.write_text(
+        json.dumps(
+            {
+                "task_id": "task-job-context",
+                "template_id": "docker_patch_json",
+                "execution_backend": "docker",
+                "agent_mode": "omx_patch",
+                "command_preset": "patch_json_backend",
+                "allowed_paths": ["calculator.py", "patch_backend.py"],
+                "check_commands": {"test": "python -m unittest -q"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
     SQLiteJobRepository(tmp_path / ".omx" / "orchestrator.db").create(
         {
             "job_id": "job-test",
             "status": "running",
             "message": "running",
-            "task_path": "task.json",
+            "task_path": str(task_path),
             "run_id": "",
         }
     )
@@ -45,6 +62,10 @@ def test_job_status_reads_persisted_job(monkeypatch, tmp_path: Path):
     assert response.status_code == 200
     assert "job-test" in response.text
     assert "running" in response.text
+    assert "启动配置" in response.text
+    assert "Docker Patch JSON" in response.text
+    assert "docker_patch_json" in response.text
+    assert "patch_json_backend" in response.text
 
 
 def test_job_status_infers_run_and_shows_progress(monkeypatch, tmp_path: Path):
@@ -98,6 +119,7 @@ def test_job_status_infers_run_and_shows_progress(monkeypatch, tmp_path: Path):
     assert "review running" in response.text
     assert "任务已提交" in response.text
     assert "锛" not in response.text
+    assert "启动配置" in response.text
     assert job is not None
     assert job["run_id"] == "run-progress"
 
@@ -138,6 +160,70 @@ def test_run_detail_shows_no_docker_evidence_for_local_run(monkeypatch, tmp_path
     assert response.status_code == 200
     assert "Docker 执行证据" in response.text
     assert "本次运行没有 Docker sandbox 执行记录" in response.text
+
+
+def test_run_detail_shows_task_template_context(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    run_dir = tmp_path / ".omx" / "runs" / "run-template-context"
+    _write_run_state(tmp_path, "run-template-context", "task-template-context", RunStatus.DONE, "done")
+    (run_dir / "task.json").write_text(
+        json.dumps(
+            {
+                "task_id": "task-template-context",
+                "template_id": "docker_team_patch",
+                "execution_backend": "docker",
+                "agent_mode": "omx_team_patch",
+                "command_preset": "team_patch_backend",
+                "worktree_path": str(tmp_path / "worktree"),
+                "allowed_paths": ["calculator.py", "docker_team_backend.py"],
+                "check_commands": {"test": "python -m unittest -q"},
+                "agent_commands": {
+                    "patch_coder": "python /worktree/docker_team_backend.py {task_id} {prompt_file}"
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    response = TestClient(app).get("/runs/run-template-context")
+
+    assert response.status_code == 200
+    assert "启动配置" in response.text
+    assert "Docker OMX Team Patch" in response.text
+    assert "docker_team_patch" in response.text
+    assert "team_patch_backend" in response.text
+    assert "omx_team_patch" in response.text
+    assert "python -m unittest -q" in response.text
+    assert "docker_team_backend.py" in response.text
+
+
+def test_run_detail_infers_command_preset_for_legacy_task(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    run_dir = tmp_path / ".omx" / "runs" / "run-legacy-template-context"
+    _write_run_state(tmp_path, "run-legacy-template-context", "task-legacy-template", RunStatus.DONE, "done")
+    (run_dir / "task.json").write_text(
+        json.dumps(
+            {
+                "task_id": "task-legacy-template",
+                "execution_backend": "docker",
+                "agent_mode": "omx_team_patch",
+                "allowed_paths": ["calculator.py"],
+                "check_commands": {"test": "python -m unittest -q"},
+                "agent_commands": {
+                    "patch_coder": "python /worktree/docker_team_backend.py {task_id} {prompt_file}"
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    response = TestClient(app).get("/runs/run-legacy-template-context")
+
+    assert response.status_code == 200
+    assert "team_patch_backend" in response.text
+    assert "docker" in response.text
 
 
 def test_index_reconciles_halted_run_after_restart(monkeypatch, tmp_path: Path):
@@ -187,6 +273,34 @@ def test_web_index_shows_persisted_jobs(monkeypatch, tmp_path: Path):
     assert response.status_code == 200
     assert "job-test" in response.text
     assert "running" in response.text
+
+
+def test_web_index_shows_recent_job_on_template_card(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+    task_path = tmp_path / ".omx" / "web-tasks" / "task-template-recent.json"
+    task_path.parent.mkdir(parents=True)
+    task_path.write_text(
+        json.dumps({"task_id": "task-template-recent", "template_id": "docker_team_patch"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    SQLiteJobRepository(tmp_path / ".omx" / "orchestrator.db").create(
+        {
+            "job_id": "job-template-recent",
+            "status": "done",
+            "message": "done",
+            "task_path": str(task_path),
+            "run_id": "run-template-recent",
+        }
+    )
+
+    response = TestClient(app).get("/")
+
+    assert response.status_code == 200
+    assert "Docker OMX Team Patch" in response.text
+    assert "Recent: done / run-template-recent" in response.text
+    assert 'class="template-recent done"' in response.text
+    assert 'href="/jobs/job-template-recent"' in response.text
 
 
 def test_task_form_validation_rejects_bad_input(monkeypatch, tmp_path: Path):
@@ -301,6 +415,57 @@ def test_web_index_exposes_docker_backend_option(monkeypatch, tmp_path: Path):
     assert 'value="team_patch_backend"' in response.text
     assert "Docker Agent 快速上手" in response.text
     assert "Docker 执行证据" in response.text
+
+
+def test_web_index_exposes_task_template_selector(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+
+    response = TestClient(app).get("/")
+
+    assert response.status_code == 200
+    assert 'name="template_id"' in response.text
+    assert 'value="local_omx_team"' in response.text
+    assert 'value="docker_team_patch"' in response.text
+    assert 'value="docker_patch_json"' in response.text
+    assert "Local OMX Team Patch" in response.text
+    assert "Docker OMX Team Patch" in response.text
+    assert "Default" in response.text
+    assert "Recommended" in response.text
+    assert "Backend: docker" in response.text
+    assert "Agent: omx_team_patch" in response.text
+    assert "Preset: team_patch_backend" in response.text
+    assert "Checks: python -m unittest -q" in response.text
+    assert "Paths: calculator.py, test_calculator.py, docker_team_backend.py" in response.text
+    assert 'action="/templates/run"' in response.text
+    assert "直接运行" in response.text
+
+
+def test_web_index_applies_docker_team_template(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+
+    response = TestClient(app).get("/?template_id=docker_team_patch")
+
+    assert response.status_code == 200
+    assert 'name="template_id" value="docker_team_patch"' in response.text
+    assert 'value="task-docker-team-web-001"' in response.text
+    assert 'value="docker" selected' in response.text
+    assert 'value="team_patch_backend" selected' in response.text
+    assert 'value="omx_team_patch" selected' in response.text
+    assert "docker_team_backend.py" in response.text
+    assert "python /worktree/docker_team_backend.py {task_id} {prompt_file}" in response.text
+
+
+def test_web_index_invalid_template_falls_back_to_local(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+
+    response = TestClient(app).get("/?template_id=missing-template")
+
+    assert response.status_code == 200
+    assert 'name="template_id" value="local_omx_team"' in response.text
+    assert 'value="task-omx-team-web-001"' in response.text
 
 
 def test_task_form_submission_defaults_to_local_backend(monkeypatch, tmp_path: Path):
@@ -548,6 +713,82 @@ def test_task_form_docker_command_preset_writes_safe_agent_command(monkeypatch, 
         "patch_fixer": None,
         "reviewer": None,
     }
+
+
+def test_task_form_template_submission_writes_template_id(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+    captured: dict[str, Path] = {}
+
+    def fake_start(task_path: Path, *, agent_mode: str, real_checks: bool) -> str:
+        captured["task_path"] = task_path
+        return "job-docker-template"
+
+    monkeypatch.setattr("orchestrator.interfaces.web.main._start_background_run", fake_start)
+
+    response = TestClient(app).post(
+        "/tasks/run",
+        data={
+            "template_id": "docker_team_patch",
+            "task_id": "task-docker-template-web",
+            "title": "docker template",
+            "description": "docker template",
+            "change_type": "bugfix",
+            "allowed_paths": "calculator.py\ntest_calculator.py\ndocker_team_backend.py",
+            "worktree_path": str(tmp_path / ".tmp" / "omx-unified-diff-smoke"),
+            "check_command": "python -m unittest -q",
+            "agent_mode": "omx_team_patch",
+            "command_preset": "team_patch_backend",
+            "patch_coder": "",
+            "patch_fixer": "",
+            "reviewer": "",
+            "execution_backend": "docker",
+            "sandbox_image": "python:3.12-slim",
+            "sandbox_network": "none",
+            "sandbox_worktree_mount": "readonly",
+            "sandbox_memory_limit": "1g",
+            "sandbox_cpu_limit": "1",
+            "real_checks": "on",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    task = json.loads(captured["task_path"].read_text(encoding="utf-8"))
+    assert task["template_id"] == "docker_team_patch"
+    assert task["execution_backend"] == "docker"
+    assert task["agent_mode"] == "omx_team_patch"
+    assert task["agent_commands"]["patch_coder"] == "python /worktree/docker_team_backend.py {task_id} {prompt_file}"
+
+
+def test_template_direct_run_uses_whitelisted_template(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+    captured: dict[str, Path] = {}
+
+    def fake_start(task_path: Path, *, agent_mode: str, real_checks: bool) -> str:
+        captured["task_path"] = task_path
+        captured["agent_mode"] = agent_mode
+        captured["real_checks"] = real_checks
+        return "job-direct-template"
+
+    monkeypatch.setattr("orchestrator.interfaces.web.main._start_background_run", fake_start)
+
+    response = TestClient(app).post(
+        "/templates/run",
+        data={"template_id": "docker_team_patch"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/jobs/job-direct-template"
+    task = json.loads(captured["task_path"].read_text(encoding="utf-8"))
+    assert captured["agent_mode"] == "omx_team_patch"
+    assert captured["real_checks"] is True
+    assert task["template_id"] == "docker_team_patch"
+    assert task["task_id"] == "task-docker-team-web-001"
+    assert task["execution_backend"] == "docker"
+    assert task["agent_commands"]["patch_coder"] == "python /worktree/docker_team_backend.py {task_id} {prompt_file}"
 
 
 def test_default_smoke_worktree_includes_docker_agent_backends(monkeypatch, tmp_path: Path):

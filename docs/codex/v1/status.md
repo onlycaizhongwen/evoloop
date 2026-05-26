@@ -207,3 +207,45 @@
 - 新增文档：`docs/codex/v1/plans/web-ui-docker-agent-quickstart.md`。
 - 文档覆盖启动 Web UI、选择 Docker agent 预设、默认模板文件、安全边界和验证证据。
 - 验证：`python -m pytest -q tests/test_web_ui.py` 为 `27 passed`；`python -m pytest -q` 为 `106 passed`。
+# 2026-05-26 Web UI Task Templates
+
+- 状态：已完成
+- 摘要：Web UI 新增后端白名单任务模板，用户可在首页选择模板自动填充 agent/backend/preset/paths/check command；Job Status 和 Run Detail 均新增启动配置面板用于复盘运行来源。
+- 产物：`orchestrator/application/task_template_registry.py`、`orchestrator/interfaces/web/main.py`、`orchestrator/interfaces/web/templates/index.html`、`orchestrator/interfaces/web/templates/job_status.html`、`orchestrator/interfaces/web/templates/run_detail.html`、`tests/test_task_template_registry.py`、`tests/test_web_ui.py`、`docs/codex/v1/plans/web-ui-task-template-management.md`
+- 验证：`python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` 为 `38 passed`；`python -m pytest -q` 为 `117 passed`。
+# 2026-05-26 Web UI Task Template Preview
+
+- 状态：已完成
+- 摘要：Homepage task template cards now preview startup config before applying a template: `execution_backend`, `agent_mode`, `command_preset`, `allowed_paths`, and `check_command`.
+- 产物：`orchestrator/application/task_template_registry.py`、`orchestrator/interfaces/web/templates/index.html`、`orchestrator/interfaces/web/static/styles.css`、`tests/test_task_template_registry.py`、`tests/test_web_ui.py`、`docs/codex/v1/plans/web-ui-task-template-management.md`
+- 验证：`python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` 为 `38 passed`；`python -m pytest -q` 为 `117 passed`；`python -m py_compile orchestrator/application/task_template_registry.py orchestrator/interfaces/web/main.py` 通过。
+# 2026-05-26 Web UI Task Template Badges
+
+- 状态：已完成
+- 摘要：首页任务模板卡片新增后端驱动标签，展示 `Default`、`Recommended`、`Docker`、`Local`、`Demo` 等提示，帮助用户优先选择推荐模板。
+- 产物：`orchestrator/application/task_template_registry.py`、`orchestrator/interfaces/web/templates/index.html`、`orchestrator/interfaces/web/static/styles.css`、`tests/test_task_template_registry.py`、`tests/test_web_ui.py`
+- 验证：`python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` 为 `38 passed`；`python -m pytest -q` 为 `117 passed`；`python -m py_compile orchestrator/application/task_template_registry.py orchestrator/interfaces/web/main.py` 通过。
+# 2026-05-26 Web UI Task Template Recent Job
+
+- 状态：已完成
+- 摘要：首页任务模板卡片新增最近运行提示，会根据 SQLite 最近 Job 和 task JSON 的 `template_id` 显示该模板最近一次 Job 的 `status/run_id`，并链接到 Job 状态页。
+- 产物：`orchestrator/interfaces/web/main.py`、`orchestrator/interfaces/web/templates/index.html`、`orchestrator/interfaces/web/static/styles.css`、`tests/test_web_ui.py`、`docs/codex/v1/plans/web-ui-task-template-management.md`
+- 验证：`python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` 为 `39 passed`；`python -m pytest -q` 为 `118 passed`；`python -m py_compile orchestrator/application/task_template_registry.py orchestrator/interfaces/web/main.py` 通过。
+# 2026-05-26 Web UI Task Template Recent Job Status Color
+
+- 状态：已完成
+- 摘要：首页任务模板卡片的最近运行链接新增状态色：`done` 为绿色、`failed` 为红色、`running` 为蓝色，便于快速判断模板最近一次运行结果。
+- 产物：`orchestrator/interfaces/web/main.py`、`orchestrator/interfaces/web/templates/index.html`、`orchestrator/interfaces/web/static/styles.css`、`tests/test_web_ui.py`
+- 验证：`python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` 为 `39 passed`；`python -m pytest -q` 为 `118 passed`；`python -m py_compile orchestrator/application/task_template_registry.py orchestrator/interfaces/web/main.py` 通过。
+# 2026-05-26 Web UI Direct Run Template
+
+- 状态：已完成
+- 摘要：首页任务模板卡片新增 `直接运行` 按钮，提交到 `/templates/run`，由后端白名单模板生成 task JSON 并直接启动 Job。
+- 产物：`orchestrator/interfaces/web/main.py`、`orchestrator/interfaces/web/templates/index.html`、`orchestrator/interfaces/web/static/styles.css`、`tests/test_web_ui.py`
+- 验证：`python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` 为 `40 passed`；`python -m pytest -q` 为 `119 passed`；`python -m py_compile orchestrator/application/task_template_registry.py orchestrator/interfaces/web/main.py` 通过。
+# 2026-05-26 Web UI Task Template Preview HTML
+
+- 状态：已完成
+- 摘要：新增静态 HTML 预览页，用于直观看到首页任务模板增强效果，包括配置预览、推荐标签、最近运行状态、状态色和 `直接运行` 按钮。
+- 产物：`项目工程文档/WebUI任务模板增强预览.html`
+- 验证：已确认文件生成，大小约 12KB，可直接用浏览器打开查看。
