@@ -111,6 +111,28 @@
       <summary>诊断日志，排查问题时再看</summary>
       <section class="grid detail-grid logs">
         <section>
+          <h2>Docker 执行证据</h2>
+          {% if docker_evidence.enabled %}
+          <div class="evidence-grid">
+            <div><span>执行次数</span><strong>{{ docker_evidence.count }}</strong></div>
+            <div><span>镜像</span><strong>{{ docker_evidence.image }}</strong></div>
+            <div><span>网络</span><strong>{{ docker_evidence.network }}</strong></div>
+            <div><span>Worktree 挂载</span><strong>{{ docker_evidence.worktree_mount }}</strong></div>
+            <div><span>容器路径</span><strong>{{ docker_evidence.worktree_container_path }}</strong></div>
+            <div><span>最后阶段</span><strong>{{ docker_evidence.phase }}</strong></div>
+            <div><span>退出码</span><strong>{{ docker_evidence.exit_code }}</strong></div>
+            <div><span>超时</span><strong>{{ docker_evidence.timed_out }}</strong></div>
+          </div>
+          <p class="empty">阶段：{{ docker_evidence.phases }}</p>
+          <p class="empty">日志：{{ docker_evidence.log_path }}</p>
+          {% for log in docker_evidence.recent_logs %}
+          <pre>{{ log }}</pre>
+          {% endfor %}
+          {% else %}
+          <p class="empty">本次运行没有 Docker sandbox 执行记录。</p>
+          {% endif %}
+        </section>
+        <section>
           <h2>阶段日志</h2>
           <pre>{{ phase_log or "暂无 phase.log" }}</pre>
         </section>

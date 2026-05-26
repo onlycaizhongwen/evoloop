@@ -129,6 +129,17 @@ def test_job_status_reconciles_done_run_after_restart(monkeypatch, tmp_path: Pat
     assert job["run_id"] == "run-done"
 
 
+def test_run_detail_shows_no_docker_evidence_for_local_run(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    _write_run_state(tmp_path, "run-local", "task-local", RunStatus.DONE, "done")
+
+    response = TestClient(app).get("/runs/run-local")
+
+    assert response.status_code == 200
+    assert "Docker 执行证据" in response.text
+    assert "本次运行没有 Docker sandbox 执行记录" in response.text
+
+
 def test_index_reconciles_halted_run_after_restart(monkeypatch, tmp_path: Path):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "examples").mkdir()
@@ -286,6 +297,10 @@ def test_web_index_exposes_docker_backend_option(monkeypatch, tmp_path: Path):
     assert 'name="execution_backend"' in response.text
     assert 'value="local"' in response.text
     assert 'value="docker"' in response.text
+    assert 'name="command_preset"' in response.text
+    assert 'value="team_patch_backend"' in response.text
+    assert "Docker Agent 快速上手" in response.text
+    assert "Docker 执行证据" in response.text
 
 
 def test_task_form_submission_defaults_to_local_backend(monkeypatch, tmp_path: Path):
@@ -488,6 +503,162 @@ def test_task_form_validation_allows_container_paths_for_docker_commands(monkeyp
     assert task["agent_commands"]["patch_coder"] == "python /worktree/backend.py {task_id} {prompt_file}"
 
 
+def test_task_form_docker_command_preset_writes_safe_agent_command(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    captured: dict[str, Path] = {}
+
+    def fake_start(task_path: Path, *, agent_mode: str, real_checks: bool) -> str:
+        captured["task_path"] = task_path
+        return "job-docker-preset"
+
+    monkeypatch.setattr("orchestrator.interfaces.web.main._start_background_run", fake_start)
+
+    response = TestClient(app).post(
+        "/tasks/run",
+        data={
+            "task_id": "task-docker-preset-web",
+            "title": "docker preset",
+            "description": "docker preset",
+            "change_type": "bugfix",
+            "allowed_paths": "calculator.py",
+            "worktree_path": str(worktree),
+            "check_command": "python -m unittest -q",
+            "agent_mode": "omx_team_patch",
+            "command_preset": "team_patch_backend",
+            "patch_coder": r'python "D:\unsafe\backend.py" {task_id} {prompt_file}',
+            "patch_fixer": "ignored",
+            "reviewer": "ignored",
+            "execution_backend": "docker",
+            "sandbox_image": "python:3.12-slim",
+            "sandbox_network": "none",
+            "sandbox_worktree_mount": "readonly",
+            "sandbox_memory_limit": "1g",
+            "sandbox_cpu_limit": "1",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    task = json.loads(captured["task_path"].read_text(encoding="utf-8"))
+    assert task["agent_commands"] == {
+        "patch_coder": "python /worktree/docker_team_backend.py {task_id} {prompt_file}",
+        "patch_fixer": None,
+        "reviewer": None,
+    }
+
+
+def test_default_smoke_worktree_includes_docker_agent_backends(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+    captured: dict[str, Path] = {}
+
+    def fake_start(task_path: Path, *, agent_mode: str, real_checks: bool) -> str:
+        captured["task_path"] = task_path
+        return "job-default-docker-backends"
+
+    monkeypatch.setattr("orchestrator.interfaces.web.main._start_background_run", fake_start)
+
+    response = TestClient(app).post(
+        "/tasks/run",
+        data={
+            "task_id": "task-default-docker-backends",
+            "title": "default docker backends",
+            "description": "default docker backends",
+            "change_type": "bugfix",
+            "allowed_paths": "calculator.py\ndocker_team_backend.py\npatch_backend.py",
+            "worktree_path": str(tmp_path / ".tmp" / "omx-unified-diff-smoke"),
+            "check_command": "python -m unittest -q",
+            "agent_mode": "omx_team_patch",
+            "command_preset": "team_patch_backend",
+            "patch_coder": "",
+            "patch_fixer": "",
+            "reviewer": "",
+            "execution_backend": "docker",
+            "sandbox_image": "python:3.12-slim",
+            "sandbox_network": "none",
+            "sandbox_worktree_mount": "readonly",
+            "sandbox_memory_limit": "1g",
+            "sandbox_cpu_limit": "1",
+        },
+        follow_redirects=False,
+    )
+
+    worktree = tmp_path / ".tmp" / "omx-unified-diff-smoke"
+    assert response.status_code == 303
+    assert (worktree / "docker_team_backend.py").exists()
+    assert (worktree / "patch_backend.py").exists()
+    task = json.loads(captured["task_path"].read_text(encoding="utf-8"))
+    assert "docker_team_backend.py" in task["allowed_paths"]
+    assert task["agent_commands"]["patch_coder"] == "python /worktree/docker_team_backend.py {task_id} {prompt_file}"
+
+
+def test_task_form_docker_command_preset_rejects_wrong_agent_mode(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+
+    response = TestClient(app).post(
+        "/tasks/run",
+        data={
+            "task_id": "task-docker-preset-bad-agent",
+            "title": "docker preset",
+            "description": "docker preset",
+            "change_type": "bugfix",
+            "allowed_paths": "calculator.py",
+            "worktree_path": str(worktree),
+            "check_command": "python -m unittest -q",
+            "agent_mode": "mock",
+            "command_preset": "team_patch_backend",
+            "patch_coder": "",
+            "patch_fixer": "",
+            "reviewer": "",
+            "execution_backend": "docker",
+            "sandbox_image": "python:3.12-slim",
+            "sandbox_network": "none",
+            "sandbox_worktree_mount": "readonly",
+            "sandbox_memory_limit": "1g",
+            "sandbox_cpu_limit": "1",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "team_patch_backend" in response.text
+    assert "omx_team_patch" in response.text
+
+
+def test_task_form_docker_command_preset_requires_docker_backend(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+
+    response = TestClient(app).post(
+        "/tasks/run",
+        data={
+            "task_id": "task-docker-preset-local",
+            "title": "docker preset",
+            "description": "docker preset",
+            "change_type": "bugfix",
+            "allowed_paths": "calculator.py",
+            "worktree_path": str(worktree),
+            "check_command": "",
+            "agent_mode": "omx_team_patch",
+            "command_preset": "team_patch_backend",
+            "patch_coder": "",
+            "patch_fixer": "",
+            "reviewer": "",
+            "execution_backend": "local",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "require execution backend docker" in response.text
+
+
 def test_web_docker_hard_check_smoke_script_compiles():
     script = Path("scripts/run_web_docker_hard_check_smoke.py")
 
@@ -598,6 +769,91 @@ def test_web_omx_team_patch_job_runs_to_detail(monkeypatch, tmp_path: Path):
     assert "task-team-web-closed-loop" in detail.text
 
 
+def test_web_docker_agent_preset_job_runs_to_detail(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    (worktree / "calculator.py").write_text("def add(a, b):\n    return a - b\n", encoding="utf-8")
+    (worktree / "test_calculator.py").write_text(
+        (
+            "import unittest\n\n"
+            "from calculator import add\n\n\n"
+            "class CalculatorTest(unittest.TestCase):\n"
+            "    def test_add(self):\n"
+            "        self.assertEqual(add(1, 2), 3)\n\n\n"
+            "if __name__ == '__main__':\n"
+            "    unittest.main()\n"
+        ),
+        encoding="utf-8",
+    )
+    (worktree / "docker_team_backend.py").write_text(
+        "\n".join(
+            [
+                "import json, pathlib, sys",
+                "task_id = sys.argv[1]",
+                "prompt = pathlib.Path(sys.argv[2]).read_text(encoding='utf-8')",
+                "assert 'Allowed file snapshot' in prompt",
+                "print(json.dumps({'schema_version':'1.0','task_id':task_id,'status':'completed','roles':{},'artifacts':{'patch_plan':{'schema_version':'1.0','task_id':task_id,'summary':'fix','operations':[{'op':'replace_text','path':'calculator.py','old':'return a - b','new':'return a + b'}]},'review':{'schema_version':'1.0','task_id':task_id,'pass':True,'confidence':90,'summary':'ok','issues':[],'blocking':False,'recommended_next_action':'pass'}},'diagnostics':[]}))",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/tasks/run",
+        data={
+            "task_id": "task-docker-agent-preset-closed-loop",
+            "title": "docker preset",
+            "description": "docker preset",
+            "change_type": "bugfix",
+            "allowed_paths": "calculator.py\ntest_calculator.py\ndocker_team_backend.py",
+            "worktree_path": str(worktree),
+            "check_command": "python -m unittest -q",
+            "agent_mode": "omx_team_patch",
+            "command_preset": "team_patch_backend",
+            "patch_coder": "",
+            "patch_fixer": "",
+            "reviewer": "",
+            "execution_backend": "docker",
+            "sandbox_image": "python:3.12-slim",
+            "sandbox_network": "none",
+            "sandbox_worktree_mount": "readonly",
+            "sandbox_memory_limit": "1g",
+            "sandbox_cpu_limit": "1",
+            "real_checks": "on",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    job_id = response.headers["location"].rsplit("/", 1)[-1]
+    repository = SQLiteJobRepository(tmp_path / ".omx" / "orchestrator.db")
+    job = _wait_for_job(repository, job_id, timeout_seconds=120)
+
+    assert job["status"] == "done"
+    assert job["run_id"].startswith("run-")
+    assert "return a + b" in (worktree / "calculator.py").read_text(encoding="utf-8")
+
+    run_dir = tmp_path / ".omx" / "runs" / job["run_id"]
+    docker_log = run_dir / "logs" / "docker_sandbox.jsonl"
+    assert docker_log.exists()
+    docker_log_text = docker_log.read_text(encoding="utf-8")
+    assert "/worktree/docker_team_backend.py" in docker_log_text
+    assert '"phase": "agent:omx_team_patch:team"' in docker_log_text
+
+    detail = client.get(f"/runs/{job['run_id']}")
+    assert detail.status_code == 200
+    assert "Docker 执行证据" in detail.text
+    assert "python:3.12-slim" in detail.text
+    assert "readonly" in detail.text
+    assert "/worktree/docker_team_backend.py" in detail.text
+    assert "agent:omx_team_patch:team" in detail.text
+    assert "Team Result" in detail.text
+    assert "task-docker-agent-preset-closed-loop" in detail.text
+
+
 def test_web_job_marks_halted_run_as_failed(monkeypatch, tmp_path: Path):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "examples").mkdir()
@@ -646,8 +902,8 @@ def test_web_job_marks_halted_run_as_failed(monkeypatch, tmp_path: Path):
     assert "停在 code 阶段" in job["message"]
 
 
-def _wait_for_job(repository: SQLiteJobRepository, job_id: str) -> dict:
-    deadline = time.time() + 10
+def _wait_for_job(repository: SQLiteJobRepository, job_id: str, timeout_seconds: int = 10) -> dict:
+    deadline = time.time() + timeout_seconds
     while time.time() < deadline:
         job = repository.get(job_id)
         if job and job["status"] in {"done", "failed"}:

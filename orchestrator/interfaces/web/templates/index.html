@@ -101,6 +101,24 @@
         </div>
         <p class="empty">Docker commands should use /worktree, /run, /cache, or placeholders like {prompt_file}; host absolute paths are rejected.</p>
 
+        <label>Docker agent 命令预设
+          <select name="command_preset">
+            {% for preset in docker_agent_command_presets %}
+            <option value="{{ preset.id }}" {% if form.command_preset == preset.id %}selected{% endif %}>
+              {{ preset.label }}{% if preset.id != "custom" %} / {{ preset.agent_modes }}{% endif %}
+            </option>
+            {% endfor %}
+          </select>
+        </label>
+        <div class="preset-list">
+          {% for preset in docker_agent_command_presets %}
+          <div class="preset-item">
+            <strong>{{ preset.label }}</strong>
+            <span>{{ preset.description }}</span>
+          </div>
+          {% endfor %}
+        </div>
+
         <label>Test command <input name="check_command" value="{{ form.check_command }}"></label>
         <label>Patch coder / Team command <input name="patch_coder" value='{{ form.patch_coder }}'></label>
         <label>Patch fixer <input name="patch_fixer" value='{{ form.patch_fixer }}'></label>
@@ -110,6 +128,17 @@
       </form>
 
       <aside class="stack">
+        <section class="panel quickstart">
+          <h2>Docker Agent 快速上手</h2>
+          <div class="steps">
+            <div><span>1</span><strong>Execution backend 选 docker</strong></div>
+            <div><span>2</span><strong>Agent 选 omx_team_patch</strong></div>
+            <div><span>3</span><strong>命令预设选 Docker team_result backend</strong></div>
+            <div><span>4</span><strong>提交后在 Run detail 查看 Docker 执行证据</strong></div>
+          </div>
+          <p class="empty">默认 worktree 会自动带上 `docker_team_backend.py`，不需要手写 `/worktree` 或 `/run`。</p>
+        </section>
+
         <form class="panel" method="post" action="/examples/run">
           <h2>运行示例</h2>
           <label>Task

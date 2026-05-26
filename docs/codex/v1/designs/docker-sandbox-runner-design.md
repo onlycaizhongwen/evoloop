@@ -492,6 +492,100 @@ python -m pytest -q
 91 passed
 ```
 
+## 22. Web UI Docker Agent Command Presets
+
+Web UI 在 Docker backend 区域新增 `Docker agent 命令预设` 下拉框，目标是让用户不用手写 `/worktree`、`/run`、`/cache` 这些容器内路径。
+
+当前预设：
+
+| 预设 | 适用 Agent | 生成命令 |
+| :--- | :--- | :--- |
+| `custom` | 全部 | 保留用户手写命令 |
+| `team_patch_backend` | `omx_team_patch` | `python /worktree/docker_team_backend.py {task_id} {prompt_file}` |
+| `patch_json_backend` | `omx_patch` | `python /worktree/patch_backend.py {task_id} {prompt_file}` |
+
+安全策略：
+- 预设由后端白名单 `DOCKER_AGENT_COMMAND_PRESETS` 定义，表单提交时只接收预设 ID。
+- 选择非 `custom` 预设时，后端覆盖 `patch_coder` / `patch_fixer` / `reviewer` 字段，避免浏览器侧篡改手写命令。
+- 非 `custom` 预设必须搭配 `execution_backend=docker`。
+- 每个预设显式声明允许的 `agent_mode`，例如 `team_patch_backend` 只允许 `omx_team_patch`。
+- 生成后的命令仍会经过 Docker path guardrail，继续拒绝 Windows 宿主路径和非白名单绝对路径。
+
+## 23. Web UI Docker Agent Preset Closed Loop
+
+在命令预设基础上，Web UI 默认 smoke worktree 会自动生成以下文件：
+
+```text
+calculator.py
+test_calculator.py
+docker_team_backend.py
+patch_backend.py
+```
+
+因此用户可以直接在首页选择：
+
+```text
+execution_backend=docker
+agent_mode=omx_team_patch
+command_preset=team_patch_backend
+real_checks=on
+```
+
+闭环行为：
+- Web 表单创建 task JSON。
+- 后端预设写入 `python /worktree/docker_team_backend.py {task_id} {prompt_file}`。
+- DockerSandboxRunner 挂载 worktree 到 `/worktree:ro`，run artifacts 到 `/run:rw`。
+- 容器内 backend 读取 `/run/attempts/.../team_prompt.txt` 并输出 `team_result` JSON。
+- 宿主 Orchestrator 校验 `patch_plan`，应用 patch 到真实 worktree。
+- DockerSandboxRunner 再运行 hard check。
+- Run detail 展示 Team Result 与运行结果。
+
+回归验证：
+
+```text
+python -m pytest -q tests/test_web_ui.py
+26 passed
+
+python -m pytest -q
+105 passed
+```
+
+## 24. Run Detail Docker Evidence
+
+Run detail 页面新增 `Docker 执行证据` 面板，用于确认任务是否真的进入 Docker sandbox。
+
+数据来源：
+
+```text
+.omx/runs/{run_id}/logs/docker_sandbox.jsonl
+```
+
+展示字段：
+- Docker 执行次数
+- image
+- network
+- worktree mount
+- worktree container path
+- 最后阶段
+- exit code
+- timeout 标记
+- Docker 阶段列表
+- 最近 5 条 Docker 执行日志
+
+页面行为：
+- 如果没有 Docker 日志，显示“本次运行没有 Docker sandbox 执行记录”。
+- 如果存在 Docker 日志，展示 agent 与 hard check 等阶段，便于用户确认 `agent:omx_team_patch:team` 和 `check:test` 是否都在容器内跑过。
+
+回归验证：
+
+```text
+python -m pytest -q tests/test_web_ui.py
+27 passed
+
+python -m pytest -q
+106 passed
+```
+
 ## 18. Web UI Optional Docker Backend 记录
 
 本轮已把 Docker backend 暴露为 Web UI 的可选执行设置，默认行为仍保持 `local`。

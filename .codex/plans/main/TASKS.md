@@ -1,3 +1,32 @@
+# 2026-05-25 Web UI Docker Agent Command Presets
+
+- 状态：已完成
+- 摘要：Web UI 新增 Docker agent 命令预设，用户可选择安全模板生成容器内 agent 命令，无需手写 `/worktree`、`/run`、`/cache` 路径。
+- 安全策略：预设由后端 `DOCKER_AGENT_COMMAND_PRESETS` 白名单定义；非 `custom` 预设会覆盖表单命令字段，并强制匹配 `execution_backend=docker` 与对应 `agent_mode`。
+- 产物：`orchestrator/interfaces/web/main.py`、`orchestrator/interfaces/web/templates/index.html`、`orchestrator/interfaces/web/static/styles.css`、`tests/test_web_ui.py`、`docs/codex/v1/designs/docker-sandbox-runner-design.md`
+- 验证：`python -m pytest -q tests/test_web_ui.py` 为 `24 passed`；`python -m pytest -q` 为 `103 passed`。
+
+# 2026-05-25 Web UI Docker Agent Preset Closed Loop
+
+- 状态：已完成
+- 摘要：默认 smoke worktree 自动生成 Docker agent backend，页面选择 Docker backend + `team_patch_backend` 预设即可完成 Web 提交到 Docker agent、patch apply、Docker hard check 和 run detail 展示的真实闭环。
+- 产物：`orchestrator/interfaces/web/main.py`、`tests/test_web_ui.py`、`docs/codex/v1/designs/docker-sandbox-runner-design.md`、`docs/codex/v1/status.md`
+- 验证：新增定向闭环测试 2 passed；`python -m pytest -q tests/test_web_ui.py` 为 `26 passed`；`python -m pytest -q` 为 `105 passed`。
+
+# 2026-05-25 Run Detail Docker Evidence
+
+- 状态：已完成
+- 摘要：Run detail 新增 Docker 执行证据面板，展示 Docker 执行次数、image、network、mount、容器路径、阶段列表和最近 Docker 日志。
+- 产物：`orchestrator/interfaces/web/main.py`、`orchestrator/interfaces/web/templates/run_detail.html`、`orchestrator/interfaces/web/static/styles.css`、`tests/test_web_ui.py`、`docs/codex/v1/designs/docker-sandbox-runner-design.md`
+- 验证：新增定向证据测试 2 passed；`python -m pytest -q tests/test_web_ui.py` 为 `27 passed`；`python -m pytest -q` 为 `106 passed`。
+
+# 2026-05-25 Web UI Docker Agent Quickstart
+
+- 状态：已完成
+- 摘要：首页新增 Docker Agent 快速上手面板，并新增 Web UI Docker Agent 快速上手文档，降低页面使用门槛。
+- 产物：`orchestrator/interfaces/web/templates/index.html`、`orchestrator/interfaces/web/static/styles.css`、`docs/codex/v1/plans/web-ui-docker-agent-quickstart.md`、`tests/test_web_ui.py`
+- 验证：`python -m pytest -q tests/test_web_ui.py` 为 `27 passed`；`python -m pytest -q` 为 `106 passed`。
+
 # TASKS
 
 ## v1-自动循环进化编码智能体系统-文档补齐

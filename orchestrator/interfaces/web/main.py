@@ -38,6 +38,34 @@ ALLOWED_DOCKER_WORKTREE_MOUNTS = {"readonly", "rw"}
 MEMORY_LIMIT_PATTERN = re.compile(r"^\d+(?:\.\d+)?[kKmMgG]?$")
 WINDOWS_ABSOLUTE_PATH_PATTERN = re.compile(r"(^|[\s\"'])([A-Za-z]:[\\/][^\s\"']*)")
 ALLOWED_DOCKER_ABSOLUTE_PATH_PREFIXES = ("/worktree", "/run", "/cache")
+DOCKER_AGENT_COMMAND_PRESETS = {
+    "custom": {
+        "label": "Custom commands",
+        "description": "Keep the command fields as entered.",
+        "agent_modes": sorted(ALLOWED_AGENT_MODES),
+        "commands": None,
+    },
+    "team_patch_backend": {
+        "label": "Docker team_result backend",
+        "description": "Run the default worktree backend that prints OMX team_result JSON.",
+        "agent_modes": ["omx_team_patch"],
+        "commands": {
+            "patch_coder": "python /worktree/docker_team_backend.py {task_id} {prompt_file}",
+            "patch_fixer": "",
+            "reviewer": "",
+        },
+    },
+    "patch_json_backend": {
+        "label": "Docker patch_plan backend",
+        "description": "Run the default worktree backend that prints patch_plan JSON.",
+        "agent_modes": ["omx_patch"],
+        "commands": {
+            "patch_coder": "python /worktree/patch_backend.py {task_id} {prompt_file}",
+            "patch_fixer": "python /worktree/patch_backend.py {task_id} {prompt_file}",
+            "reviewer": "",
+        },
+    },
+}
 
 app = FastAPI(title="Auto Evolution Orchestrator")
 app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="static")
@@ -60,6 +88,7 @@ class TaskForm:
     patch_coder: str = ""
     patch_fixer: str = ""
     reviewer: str = ""
+    command_preset: str = "custom"
     execution_backend: str = "local"
     sandbox_image: str = "python:3.12-slim"
     sandbox_network: str = "none"
@@ -89,6 +118,7 @@ def run_task(
     patch_coder: Annotated[str, Form()] = "",
     patch_fixer: Annotated[str, Form()] = "",
     reviewer: Annotated[str, Form()] = "",
+    command_preset: Annotated[str, Form()] = "custom",
     execution_backend: Annotated[str, Form()] = "local",
     sandbox_image: Annotated[str, Form()] = "python:3.12-slim",
     sandbox_network: Annotated[str, Form()] = "none",
@@ -109,6 +139,7 @@ def run_task(
         patch_coder=patch_coder,
         patch_fixer=patch_fixer,
         reviewer=reviewer,
+        command_preset=command_preset,
         execution_backend=execution_backend,
         sandbox_image=sandbox_image,
         sandbox_network=sandbox_network,
@@ -117,6 +148,7 @@ def run_task(
         sandbox_cpu_limit=sandbox_cpu_limit,
         real_checks=real_checks,
     )
+    _apply_command_preset(form)
     errors = _validate_task_form(form)
     if errors:
         form.errors = errors
@@ -147,9 +179,9 @@ def run_task(
         "check_commands": {"test": check_command or None, "lint": None, "typecheck": None},
         "agent_mode": agent_mode,
         "agent_commands": {
-            "patch_coder": patch_coder or None,
-            "patch_fixer": patch_fixer or None,
-            "reviewer": reviewer or None,
+            "patch_coder": form.patch_coder or None,
+            "patch_fixer": form.patch_fixer or None,
+            "reviewer": form.reviewer or None,
         },
         "max_attempts": 2,
         "max_review_json_retries": 1,
@@ -207,6 +239,7 @@ def run_detail(request: Request, run_id: str):
             "final_report": _read_optional(run_dir / "final_report.md"),
             "agent_log": _read_optional(run_dir / "logs" / "agent.log"),
             "phase_log": _read_optional(run_dir / "logs" / "phase.log"),
+            "docker_evidence": _load_docker_evidence(run_dir),
             "team_result": _read_first_optional(run_dir.glob("attempts/*/team_result.json")),
             "team_diagnostics": _read_first_optional(run_dir.glob("attempts/*/team_diagnostics.json")),
             "patches": patches,
@@ -255,6 +288,7 @@ def _render_index(request: Request, form: TaskForm, status_code: int = 200) -> H
             "jobs": _load_recent_jobs(),
             "patches": PendingPatchService().list(),
             "examples": sorted(str(path).replace("\\", "/") for path in Path("examples").glob("task*.json")),
+            "docker_agent_command_presets": _docker_agent_command_presets(),
             "project_root": Path.cwd(),
             "form": form,
         },
@@ -279,6 +313,15 @@ def _validate_task_form(form: TaskForm) -> list[str]:
         errors.append("类型只能是 feature、bugfix、refactor 或 config。")
     if form.agent_mode not in ALLOWED_AGENT_MODES:
         errors.append("Agent 模式不合法。")
+    preset = DOCKER_AGENT_COMMAND_PRESETS.get(form.command_preset)
+    if not preset:
+        errors.append("Docker agent command preset is not supported.")
+    elif form.command_preset != "custom":
+        if form.execution_backend != "docker":
+            errors.append("Docker agent command presets require execution backend docker.")
+        if form.agent_mode not in preset["agent_modes"]:
+            allowed = ", ".join(preset["agent_modes"])
+            errors.append(f"Docker agent command preset {form.command_preset} only supports: {allowed}.")
 
     if form.execution_backend not in ALLOWED_EXECUTION_BACKENDS:
         errors.append("Execution backend 只能是 local 或 docker。")
@@ -314,6 +357,28 @@ def _validate_task_form(form: TaskForm) -> list[str]:
     if form.reviewer.strip():
         _validate_web_command(form.reviewer, "Reviewer", errors)
     return errors
+
+
+def _apply_command_preset(form: TaskForm) -> None:
+    preset = DOCKER_AGENT_COMMAND_PRESETS.get(form.command_preset)
+    if not preset or form.command_preset == "custom":
+        return
+    commands = preset.get("commands") or {}
+    form.patch_coder = str(commands.get("patch_coder") or "")
+    form.patch_fixer = str(commands.get("patch_fixer") or "")
+    form.reviewer = str(commands.get("reviewer") or "")
+
+
+def _docker_agent_command_presets() -> list[dict[str, object]]:
+    return [
+        {
+            "id": preset_id,
+            "label": str(preset["label"]),
+            "description": str(preset["description"]),
+            "agent_modes": ", ".join(preset["agent_modes"]),
+        }
+        for preset_id, preset in DOCKER_AGENT_COMMAND_PRESETS.items()
+    ]
 
 
 def _validate_docker_sandbox(form: TaskForm, errors: list[str]) -> None:
@@ -570,6 +635,63 @@ def _load_job_progress(run_id: str | None) -> dict[str, str] | None:
     }
 
 
+def _load_docker_evidence(run_dir: Path) -> dict[str, object]:
+    log_path = run_dir / "logs" / "docker_sandbox.jsonl"
+    evidence: dict[str, object] = {
+        "enabled": False,
+        "count": 0,
+        "image": "",
+        "network": "",
+        "worktree_mount": "",
+        "worktree_container_path": "",
+        "phase": "",
+        "command": "",
+        "exit_code": "",
+        "duration_seconds": "",
+        "timed_out": "",
+        "last_log": "",
+        "phases": "",
+        "recent_logs": [],
+        "log_path": log_path.as_posix(),
+    }
+    if not log_path.exists():
+        return evidence
+
+    lines = [line for line in log_path.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip()]
+    if not lines:
+        return evidence
+
+    parsed_payloads: list[dict[str, object]] = []
+    for line in lines:
+        try:
+            parsed_payloads.append(json.loads(line))
+        except json.JSONDecodeError:
+            parsed_payloads.append({"raw": line})
+    last_payload = parsed_payloads[-1]
+    phases = [str(payload.get("phase", "")) for payload in parsed_payloads if payload.get("phase")]
+    recent_logs = [json.dumps(payload, ensure_ascii=False) for payload in parsed_payloads[-5:]]
+
+    evidence.update(
+        {
+            "enabled": True,
+            "count": len(lines),
+            "image": str(last_payload.get("image", "")),
+            "network": str(last_payload.get("network", "")),
+            "worktree_mount": str(last_payload.get("worktree_mount", "")),
+            "worktree_container_path": str(last_payload.get("worktree_container_path", "")),
+            "phase": str(last_payload.get("phase", "")),
+            "command": str(last_payload.get("command", "")),
+            "exit_code": str(last_payload.get("exit_code", "")),
+            "duration_seconds": str(last_payload.get("duration_seconds", "")),
+            "timed_out": str(last_payload.get("timed_out", "")),
+            "last_log": json.dumps(last_payload, ensure_ascii=False),
+            "phases": ", ".join(phases),
+            "recent_logs": recent_logs,
+        }
+    )
+    return evidence
+
+
 def _tail_last_line(path: Path) -> str:
     if not path.exists():
         return ""
@@ -624,10 +746,82 @@ def _prepare_default_smoke_worktree(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
     calculator = path / "calculator.py"
     test_file = path / "test_calculator.py"
+    team_backend = path / "docker_team_backend.py"
+    patch_backend = path / "patch_backend.py"
     calculator.write_text("def add(a, b):\n    return a - b\n", encoding="utf-8")
     test_file.write_text(
         "from calculator import add\n\n\ndef test_add():\n    assert add(1, 2) == 3\n",
         encoding="utf-8",
+    )
+    team_backend.write_text(_default_docker_team_backend_source(), encoding="utf-8")
+    patch_backend.write_text(_default_docker_patch_backend_source(), encoding="utf-8")
+
+
+def _default_docker_team_backend_source() -> str:
+    return "\n".join(
+        [
+            "from __future__ import annotations",
+            "",
+            "import json",
+            "import pathlib",
+            "import sys",
+            "",
+            "task_id = sys.argv[1]",
+            "prompt = pathlib.Path(sys.argv[2]).read_text(encoding='utf-8')",
+            "assert 'Allowed file snapshot' in prompt",
+            "payload = {",
+            "    'schema_version': '1.0',",
+            "    'task_id': task_id,",
+            "    'status': 'completed',",
+            "    'roles': {},",
+            "    'artifacts': {",
+            "        'patch_plan': {",
+            "            'schema_version': '1.0',",
+            "            'task_id': task_id,",
+            "            'summary': 'Fix calculator.add from Docker team backend.',",
+            "            'operations': [",
+            "                {'op': 'replace_text', 'path': 'calculator.py', 'old': 'return a - b', 'new': 'return a + b'}",
+            "            ],",
+            "        },",
+            "        'review': {",
+            "            'schema_version': '1.0',",
+            "            'task_id': task_id,",
+            "            'pass': True,",
+            "            'confidence': 91,",
+            "            'summary': 'Docker team backend review passed.',",
+            "            'issues': [],",
+            "            'blocking': False,",
+            "            'recommended_next_action': 'pass',",
+            "        },",
+            "    },",
+            "    'diagnostics': [],",
+            "}",
+            "print(json.dumps(payload, ensure_ascii=False))",
+            "",
+        ]
+    )
+
+
+def _default_docker_patch_backend_source() -> str:
+    return "\n".join(
+        [
+            "from __future__ import annotations",
+            "",
+            "import json",
+            "import sys",
+            "",
+            "task_id = sys.argv[1]",
+            "payload = {",
+            "    'schema_version': '1.0',",
+            "    'task_id': task_id,",
+            "    'summary': 'Fix calculator.add from Docker patch backend.',",
+            "    'operations': [",
+            "        {'op': 'replace_text', 'path': 'calculator.py', 'old': 'return a - b', 'new': 'return a + b'}",
+            "    ],",
+            "}",
+            "print(json.dumps(payload, ensure_ascii=False))",
+            "",
+        ]
     )
 
 

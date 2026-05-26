@@ -182,3 +182,28 @@
 - 已将 `orchestrator/interfaces/web/main.py` 中的默认表单、校验错误、Job 状态和 run summary 文案恢复为正常中文。
 - 已重启 8765 Web 服务，并验证首页返回 `status=200`、包含“新建任务”、包含 `omx_team_patch`，且不再包含典型乱码片段 `锛`。
 - 验证结果：`python -m pytest -q tests/test_web_ui.py` 通过，`9 passed`；`python -m pytest -q` 全量通过，当前为 `76 passed`。
+# 2026-05-25 Web UI Docker Agent Command Presets
+
+- Web UI 新增 `Docker agent 命令预设`，支持从页面选择安全模板生成容器内 agent 命令。
+- 当前内置 `custom`、`team_patch_backend`、`patch_json_backend` 三类预设。
+- 后端按 `DOCKER_AGENT_COMMAND_PRESETS` 白名单解析预设；非 `custom` 预设会覆盖手写命令，并校验必须使用 `execution_backend=docker` 和匹配的 `agent_mode`。
+- Docker path guardrail 继续生效，生成后的命令仍拒绝 Windows 宿主路径和非白名单绝对路径。
+- 验证：`python -m pytest -q tests/test_web_ui.py` 为 `24 passed`；`python -m pytest -q` 为 `103 passed`。
+# 2026-05-25 Web UI Docker Agent Preset Closed Loop
+
+- 默认 smoke worktree 现在会自动生成 `docker_team_backend.py` 和 `patch_backend.py`，配合 Docker agent 命令预设可直接运行真实闭环。
+- Web 表单选择 `execution_backend=docker`、`agent_mode=omx_team_patch`、`command_preset=team_patch_backend` 后，无需手写容器路径即可提交任务。
+- 验证链路覆盖：Web 提交 -> Docker agent 生成 `team_result` -> Orchestrator 校验并应用 patch -> Docker hard check -> run detail 展示结果。
+- 验证：`python -m pytest -q tests/test_web_ui.py` 为 `26 passed`；`python -m pytest -q` 为 `105 passed`。
+# 2026-05-25 Run Detail Docker Evidence
+
+- Run detail 新增 `Docker 执行证据` 面板，读取 `.omx/runs/{run_id}/logs/docker_sandbox.jsonl`。
+- 页面展示 Docker 执行次数、image、network、worktree mount、容器路径、最后阶段、退出码、阶段列表和最近 5 条 Docker 日志。
+- 无 Docker 日志时展示空状态，避免用户误以为本地任务也跑在容器里。
+- 验证：`python -m pytest -q tests/test_web_ui.py` 为 `27 passed`；`python -m pytest -q` 为 `106 passed`。
+# 2026-05-25 Web UI Docker Agent Quickstart
+
+- 首页右侧新增 `Docker Agent 快速上手` 面板，明确 Docker backend、Agent、命令预设和 Run detail 证据查看入口。
+- 新增文档：`docs/codex/v1/plans/web-ui-docker-agent-quickstart.md`。
+- 文档覆盖启动 Web UI、选择 Docker agent 预设、默认模板文件、安全边界和验证证据。
+- 验证：`python -m pytest -q tests/test_web_ui.py` 为 `27 passed`；`python -m pytest -q` 为 `106 passed`。
