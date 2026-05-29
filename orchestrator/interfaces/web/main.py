@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from orchestrator.application.dto.run_task_command import RunTaskCommand
+from orchestrator.application.use_cases.run_task import RunTaskUseCase
 from orchestrator.application.task_template_registry import (
     DEFAULT_TEMPLATE_ID,
     get_command_preset,
@@ -27,10 +28,21 @@ from orchestrator.application.task_template_registry import (
     normalize_template_id,
 )
 from orchestrator.domain.enums import RunStatus
+from orchestrator.domain.services.quality_gate import QualityGate
+from orchestrator.domain.services.review_validator import ReviewValidator
+from orchestrator.domain.services.safety_policy import SafetyPolicy
+from orchestrator.config.task_loader import TaskLoader
+from orchestrator.infrastructure.checks.fake_check_runner import FakeCheckRunner
+from orchestrator.infrastructure.checks.shell_check_runner import ShellCheckRunner
+from orchestrator.infrastructure.command.cancellation import CancellationRegistry, CommandCancelled
+from orchestrator.infrastructure.command.safe_command_runner import SafeCommandRunner
+from orchestrator.infrastructure.git.static_diff_provider import StaticDiffProvider
+from orchestrator.infrastructure.logging.file_heartbeat import FileHeartbeat
 from orchestrator.infrastructure.patches.pending_patch_service import PendingPatchService
 from orchestrator.infrastructure.persistence.file_state_repository import FileStateRepository
 from orchestrator.infrastructure.persistence.sqlite_job_repository import SQLiteJobRepository
-from orchestrator.interfaces.cli.main import build_post_apply_validation_use_case, build_use_case
+from orchestrator.interfaces.cli.main import build_agent, build_post_apply_validation_use_case
+from orchestrator.report.final_report_writer import FinalReportWriter
 
 
 RUNS_DIR = Path(".omx/runs")
@@ -50,6 +62,7 @@ ALLOWED_DOCKER_ABSOLUTE_PATH_PREFIXES = ("/worktree", "/run", "/cache")
 
 app = FastAPI(title="Auto Evolution Orchestrator")
 app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="static")
+WEB_CANCELLATION_REGISTRY = CancellationRegistry()
 
 
 @dataclass
@@ -150,6 +163,10 @@ def run_template(request: Request, template_id: Annotated[str, Form()] = DEFAULT
         form.errors = errors
         return _render_index(request, form=form, status_code=422)
 
+    existing_job = _find_running_job_for_template(form.template_id)
+    if existing_job:
+        return RedirectResponse(url=f"/jobs/{existing_job['job_id']}?reused=1", status_code=303)
+
     job_id = _create_web_task_and_start(form)
     return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
 
@@ -195,6 +212,20 @@ def _create_web_task_and_start(form: TaskForm) -> str:
     return _start_background_run(task_path, agent_mode=form.agent_mode, real_checks=form.real_checks)
 
 
+def _rerun_task_path(source_task_path: Path) -> str:
+    task = json.loads(source_task_path.read_text(encoding="utf-8"))
+    task["task_id"] = f"{_safe_id(str(task.get('task_id') or 'task'))}-rerun-{datetime.now().strftime('%H%M%S')}"
+    task["title"] = f"{str(task.get('title') or task['task_id'])}（重新运行）"
+    WEB_TASKS_DIR.mkdir(parents=True, exist_ok=True)
+    target_task_path = WEB_TASKS_DIR / f"{task['task_id']}-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.json"
+    target_task_path.write_text(json.dumps(task, ensure_ascii=False, indent=2), encoding="utf-8")
+    return _start_background_run(
+        target_task_path,
+        agent_mode=str(task.get("agent_mode") or "mock"),
+        real_checks=True,
+    )
+
+
 @app.post("/examples/run")
 def run_example(
     task_path: Annotated[str, Form()],
@@ -206,7 +237,7 @@ def run_example(
 
 
 @app.get("/jobs/{job_id}", response_class=HTMLResponse)
-def job_status(request: Request, job_id: str):
+def job_status(request: Request, job_id: str, reused: str = ""):
     job = _read_job(job_id)
     if not job:
         return RedirectResponse(url="/", status_code=303)
@@ -216,6 +247,8 @@ def job_status(request: Request, job_id: str):
         return RedirectResponse(url=f"/runs/{run_id}", status_code=303)
 
     progress = _load_job_progress(run_id) if run_id else None
+    task_context = _load_job_task_context(job, run_id)
+    failure_hint = _build_job_failure_hint(job, progress)
     return TEMPLATES.TemplateResponse(
         request,
         "job_status.html",
@@ -224,9 +257,74 @@ def job_status(request: Request, job_id: str):
             "job_id": job_id,
             "run_id": run_id,
             "progress": progress,
-            "task_context": _load_job_task_context(job, run_id),
+            "task_context": task_context,
+            "task_meta": _build_job_task_meta(job, task_context),
+            "failure_hint": failure_hint,
+            "reused_existing_job": reused == "1",
         },
     )
+
+
+@app.get("/tasks", response_class=HTMLResponse)
+def task_manager(request: Request, status: str = "all", page: int = 1, page_size: int = 10, q: str = ""):
+    normalized_status = status if status in {"all", "running", "done", "failed", "stopped"} else "all"
+    normalized_page_size = min(max(page_size, 5), 50)
+    query = q.strip()
+    filtered_jobs = _filter_task_manager_jobs(normalized_status, query)
+    total = len(filtered_jobs)
+    total_pages = max(1, (total + normalized_page_size - 1) // normalized_page_size)
+    current_page = min(max(page, 1), total_pages)
+    start = (current_page - 1) * normalized_page_size
+    enriched_jobs = filtered_jobs[start : start + normalized_page_size]
+    return TEMPLATES.TemplateResponse(
+        request,
+        "tasks.html",
+        {
+            "jobs": enriched_jobs,
+            "active_status": normalized_status,
+            "query": query,
+            "counts": _count_jobs_by_status(),
+            "pagination": {
+                "page": current_page,
+                "page_size": normalized_page_size,
+                "total": total,
+                "total_pages": total_pages,
+                "has_previous": current_page > 1,
+                "has_next": current_page < total_pages,
+                "previous_page": max(1, current_page - 1),
+                "next_page": min(total_pages, current_page + 1),
+            },
+            "form": _default_task_form(),
+            "docker_agent_command_presets": list_command_presets(),
+            "task_templates": list_task_templates(),
+            "auto_refresh": normalized_status in {"all", "running"},
+        },
+    )
+
+
+@app.post("/tasks/{job_id}/stop")
+def stop_task(job_id: str, status: str = "all", page: int = 1, page_size: int = 10):
+    safe_job_id = _safe_id(job_id)
+    job = _read_job(safe_job_id)
+    if job and str(job.get("status") or "") == "running":
+        cancelled_running_process = WEB_CANCELLATION_REGISTRY.cancel(safe_job_id)
+        _update_job(
+            safe_job_id,
+            status="stopped",
+            message=(
+                "底层命令已收到终止信号。"
+                if cancelled_running_process
+                else "已收到停止请求。当前没有可终止的底层命令，Web Job 状态已冻结。"
+            ),
+            finished_at=datetime.now().isoformat(),
+        )
+    return RedirectResponse(url=_tasks_url(status=status, page=page, page_size=page_size), status_code=303)
+
+
+@app.post("/tasks/{job_id}/delete")
+def delete_task(job_id: str, status: str = "all", page: int = 1, page_size: int = 10):
+    _job_repository().delete(_safe_id(job_id))
+    return RedirectResponse(url=_tasks_url(status=status, page=page, page_size=page_size), status_code=303)
 
 
 @app.get("/runs/{run_id}", response_class=HTMLResponse)
@@ -235,6 +333,11 @@ def run_detail(request: Request, run_id: str):
     state = repository.load_state(run_id)
     run_dir = RUNS_DIR / run_id
     patches = PendingPatchService().list(run_id=run_id)
+    task_context = _load_task_context(run_dir)
+    final_report = _read_optional(run_dir / "final_report.md")
+    phase_log = _read_optional(run_dir / "logs" / "phase.log")
+    docker_evidence = _load_docker_evidence(run_dir)
+    phase_timeline = _parse_phase_timeline(phase_log)
     return TEMPLATES.TemplateResponse(
         request,
         "run_detail.html",
@@ -243,16 +346,42 @@ def run_detail(request: Request, run_id: str):
             "run_id": run_id,
             "run_dir": run_dir,
             "summary": _build_run_summary(state, patches),
-            "task_context": _load_task_context(run_dir),
-            "final_report": _read_optional(run_dir / "final_report.md"),
+            "execution_summary": _build_execution_summary(state, patches, docker_evidence, phase_timeline),
+            "task_context": task_context,
+            "task_meta": _build_run_task_meta(state, task_context),
+            "failure_hint": _build_run_failure_hint(state, final_report, phase_log),
+            "final_report": final_report,
             "agent_log": _read_optional(run_dir / "logs" / "agent.log"),
-            "phase_log": _read_optional(run_dir / "logs" / "phase.log"),
-            "docker_evidence": _load_docker_evidence(run_dir),
+            "phase_log": phase_log,
+            "phase_timeline": phase_timeline,
+            "docker_evidence": docker_evidence,
             "team_result": _read_first_optional(run_dir.glob("attempts/*/team_result.json")),
             "team_diagnostics": _read_first_optional(run_dir.glob("attempts/*/team_diagnostics.json")),
             "patches": patches,
         },
     )
+
+
+@app.post("/jobs/{job_id}/rerun")
+def rerun_job(job_id: str):
+    job = _read_job(job_id)
+    if not job:
+        return RedirectResponse(url="/tasks", status_code=303)
+    run_id = str(job.get("run_id") or "")
+    task_path = _task_path_for_job(job, run_id)
+    if not task_path:
+        return RedirectResponse(url=f"/jobs/{_safe_id(job_id)}", status_code=303)
+    new_job_id = _rerun_task_path(task_path)
+    return RedirectResponse(url=f"/jobs/{new_job_id}", status_code=303)
+
+
+@app.post("/runs/{run_id}/rerun")
+def rerun_run(run_id: str):
+    task_path = FileStateRepository().task_path_for_run(_safe_id(run_id))
+    if not task_path.exists():
+        return RedirectResponse(url=f"/runs/{_safe_id(run_id)}", status_code=303)
+    new_job_id = _rerun_task_path(task_path)
+    return RedirectResponse(url=f"/jobs/{new_job_id}", status_code=303)
 
 
 @app.post("/patches/apply")
@@ -452,6 +581,9 @@ def _validate_web_command(command: str, label: str, errors: list[str]) -> None:
 
 def _start_background_run(task_path: Path, *, agent_mode: str, real_checks: bool) -> str:
     job_id = datetime.now().strftime("job-%Y%m%d-%H%M%S-%f")
+    workspace_root = Path.cwd()
+    db_path = workspace_root / JOBS_DB_PATH
+    runs_dir = workspace_root / RUNS_DIR
     _write_job(
         job_id,
         {
@@ -467,12 +599,20 @@ def _start_background_run(task_path: Path, *, agent_mode: str, real_checks: bool
 
     def worker() -> None:
         try:
-            state = build_use_case(agent_mode=agent_mode, real_checks=real_checks, git_diff=False).execute(
+            state = _build_web_use_case(
+                job_id,
+                agent_mode=agent_mode,
+                real_checks=real_checks,
+                runs_dir=runs_dir,
+            ).execute(
                 RunTaskCommand(task_path=task_path)
             )
+            if _job_was_stopped(job_id):
+                return
             if state.status != RunStatus.DONE:
                 _update_job(
                     job_id,
+                    db_path=db_path,
                     status="failed",
                     message=f"任务未完成，停在 {state.current_phase} 阶段。请打开结果页查看报告。",
                     run_id=state.run_id,
@@ -481,14 +621,27 @@ def _start_background_run(task_path: Path, *, agent_mode: str, real_checks: bool
                 return
             _update_job(
                 job_id,
+                db_path=db_path,
                 status="done",
                 message="任务已完成，正在打开结果页。",
                 run_id=state.run_id,
                 finished_at=datetime.now().isoformat(),
             )
         except Exception as exc:
+            if _job_was_stopped(job_id):
+                return
+            if isinstance(exc, CommandCancelled):
+                _update_job(
+                    job_id,
+                    db_path=db_path,
+                    status="stopped",
+                    message="底层命令已被停止。",
+                    finished_at=datetime.now().isoformat(),
+                )
+                return
             _update_job(
                 job_id,
+                db_path=db_path,
                 status="failed",
                 message=f"任务启动失败：{exc}",
                 finished_at=datetime.now().isoformat(),
@@ -496,6 +649,26 @@ def _start_background_run(task_path: Path, *, agent_mode: str, real_checks: bool
 
     threading.Thread(target=worker, daemon=True).start()
     return job_id
+
+
+def _build_web_use_case(job_id: str, *, agent_mode: str, real_checks: bool, runs_dir: Path | None = None) -> RunTaskUseCase:
+    heartbeat = FileHeartbeat()
+    command_runner = SafeCommandRunner(
+        heartbeat=heartbeat,
+        cancellation_registry=WEB_CANCELLATION_REGISTRY,
+        cancellation_key=_safe_id(job_id),
+    )
+    return RunTaskUseCase(
+        task_loader=TaskLoader(),
+        safety_policy=SafetyPolicy(),
+        state_repository=FileStateRepository(runs_dir or RUNS_DIR),
+        agent=build_agent(agent_mode, command_runner),
+        check_runner=ShellCheckRunner(command_runner=command_runner) if real_checks else FakeCheckRunner(pass_all=True),
+        review_validator=ReviewValidator(),
+        quality_gate=QualityGate(),
+        diff_provider=StaticDiffProvider(),
+        final_report_writer=FinalReportWriter(),
+    )
 
 
 def _job_repository() -> SQLiteJobRepository:
@@ -512,12 +685,273 @@ def _write_job(job_id: str, payload: dict[str, Any]) -> None:
     _job_repository().create(normalized)
 
 
-def _update_job(job_id: str, **updates: str) -> None:
-    _job_repository().update(_safe_id(job_id), **updates)
+def _update_job(job_id: str, db_path: Path | None = None, **updates: str) -> None:
+    repository = SQLiteJobRepository(db_path) if db_path else _job_repository()
+    repository.update(_safe_id(job_id), **updates)
+
+
+def _job_was_stopped(job_id: str) -> bool:
+    job = _read_job(job_id)
+    return bool(job and str(job.get("status") or "") == "stopped")
 
 
 def _load_recent_jobs() -> list[dict[str, Any]]:
     return [_reconcile_job(job) for job in _job_repository().list_recent(limit=20)]
+
+
+def _load_jobs_page(*, status: str, limit: int, offset: int) -> list[dict[str, Any]]:
+    status_filter = None if status == "all" else status
+    return [_reconcile_job(job) for job in _job_repository().list_page(limit=limit, offset=offset, status=status_filter)]
+
+
+def _filter_task_manager_jobs(status: str, query: str) -> list[dict[str, str]]:
+    status_filter = None if status == "all" else status
+    raw_jobs = [_reconcile_job(job) for job in _job_repository().list_page(limit=500, offset=0, status=status_filter)]
+    jobs = [_build_task_manager_job(job) for job in raw_jobs]
+    if not query:
+        return jobs
+    needle = query.lower()
+    return [job for job in jobs if _task_manager_job_matches(job, needle)]
+
+
+def _task_manager_job_matches(job: dict[str, str], needle: str) -> bool:
+    haystack = " ".join(
+        [
+            job.get("task_name", ""),
+            job.get("task_id", ""),
+            job.get("job_id", ""),
+            job.get("run_id", ""),
+            job.get("template_label", ""),
+            job.get("template_id", ""),
+            job.get("execution_backend", ""),
+            job.get("agent_mode", ""),
+            job.get("status", ""),
+        ]
+    ).lower()
+    return needle in haystack
+
+
+def _count_jobs(status: str) -> int:
+    status_filter = None if status == "all" else status
+    return _job_repository().count(status_filter)
+
+
+def _find_running_job_for_template(template_id: str) -> dict[str, Any] | None:
+    selected_template_id = normalize_template_id(template_id)
+    for job in _load_recent_jobs():
+        if str(job.get("status") or "") != "running":
+            continue
+        if _template_id_from_job(job) == selected_template_id:
+            return job
+    return None
+
+
+def _build_task_manager_job(job: dict[str, Any]) -> dict[str, str]:
+    job_id = str(job.get("job_id") or "")
+    run_id = str(job.get("run_id") or "")
+    status = str(job.get("status") or "unknown")
+    task_context = _load_job_task_context(job, run_id)
+    return {
+        "job_id": job_id,
+        "task_name": task_context.get("title") or task_context.get("task_id") or job_id,
+        "task_id": task_context.get("task_id") or "",
+        "status": status,
+        "status_class": _status_css_class(status),
+        "run_id": run_id,
+        "message": str(job.get("message") or ""),
+        "started_at": str(job.get("started_at") or ""),
+        "updated_at": str(job.get("updated_at") or ""),
+        "template_label": task_context.get("template_label") or task_context.get("template_id") or "历史任务",
+        "template_id": task_context.get("template_id") or "",
+        "execution_backend": task_context.get("execution_backend") or "旧任务未记录",
+        "agent_mode": task_context.get("agent_mode") or "",
+        "detail_url": f"/runs/{run_id}" if status == "done" and run_id else f"/jobs/{job_id}",
+        "can_stop": "1" if status == "running" else "",
+    }
+
+
+def _build_job_task_meta(job: dict[str, Any], task_context: dict[str, str]) -> dict[str, str]:
+    return {
+        "task_name": task_context.get("title") or task_context.get("task_id") or str(job.get("job_id") or ""),
+        "task_id": task_context.get("task_id") or "未记录",
+        "template": task_context.get("template_label") or task_context.get("template_id") or "历史任务",
+        "backend": task_context.get("execution_backend") or "旧任务未记录",
+        "agent": task_context.get("agent_mode") or "agent 未记录",
+        "started_at": str(job.get("started_at") or "未记录"),
+        "updated_at": str(job.get("updated_at") or "未记录"),
+    }
+
+
+def _build_run_task_meta(state: RunState, task_context: dict[str, str]) -> dict[str, str]:
+    return {
+        "task_name": task_context.get("title") or task_context.get("task_id") or state.task_id,
+        "task_id": task_context.get("task_id") or state.task_id,
+        "template": task_context.get("template_label") or task_context.get("template_id") or "历史任务",
+        "backend": task_context.get("execution_backend") or "旧任务未记录",
+        "agent": task_context.get("agent_mode") or "agent 未记录",
+        "started_at": state.started_at.isoformat(),
+        "updated_at": state.updated_at.isoformat(),
+    }
+
+
+def _build_job_failure_hint(job: dict[str, Any], progress: dict[str, str] | None) -> dict[str, str]:
+    status = str(job.get("status") or "")
+    if status not in {"failed", "stopped"}:
+        return {"enabled": ""}
+    phase = (progress or {}).get("phase") or "未记录"
+    message = str(job.get("message") or "任务未完成。")
+    return {
+        "enabled": "1",
+        "title": "失败原因",
+        "phase": phase,
+        "reason": message,
+        "next_action": _suggest_next_action(phase, message),
+    }
+
+
+def _build_run_failure_hint(state: RunState, final_report: str, phase_log: str) -> dict[str, str]:
+    status = str(state.status)
+    if status not in {"halted", "retrying"}:
+        return {"enabled": ""}
+    phase = str(state.current_phase or "未记录")
+    reason = _extract_failure_reason(final_report) or _last_nonempty_line(phase_log) or f"任务停在 {phase} 阶段。"
+    return {
+        "enabled": "1",
+        "title": "失败原因",
+        "phase": phase,
+        "reason": reason,
+        "next_action": _suggest_next_action(phase, reason),
+    }
+
+
+def _build_execution_summary(
+    state: RunState,
+    patches: list[dict[str, object]],
+    docker_evidence: dict[str, object],
+    phase_timeline: list[dict[str, str]],
+) -> dict[str, str]:
+    pending_count = sum(1 for patch in patches if patch.get("status") == "pending")
+    applied_count = sum(1 for patch in patches if patch.get("status") == "applied")
+    rejected_count = sum(1 for patch in patches if patch.get("status") == "rejected")
+    last_event = phase_timeline[-1] if phase_timeline else {}
+    docker_label = "有记录" if docker_evidence.get("enabled") else "无记录"
+    if docker_evidence.get("enabled"):
+        docker_label = f"{docker_evidence.get('count', 0)} 次 / {docker_evidence.get('image') or '镜像未记录'}"
+    return {
+        "status": str(state.status),
+        "phase": str(state.current_phase or "未记录"),
+        "attempt": f"{state.attempt}/{state.max_attempts}",
+        "patch_stats": f"待审批 {pending_count} / 已批准 {applied_count} / 已拒绝 {rejected_count}",
+        "docker": docker_label,
+        "last_event": str(last_event.get("summary") or "暂无阶段事件"),
+        "updated_at": state.updated_at.isoformat(),
+    }
+
+
+def _parse_phase_timeline(phase_log: str) -> list[dict[str, str]]:
+    timeline: list[dict[str, str]] = []
+    for line in phase_log.splitlines():
+        raw = line.strip()
+        if not raw:
+            continue
+        fields = _parse_log_fields(raw)
+        timestamp = _extract_log_timestamp(raw)
+        phase = fields.get("phase") or _fallback_phase_label(raw)
+        event = fields.get("event") or "log"
+        attempt = fields.get("attempt") or ""
+        reason = fields.get("reason") or fields.get("message") or ""
+        summary = _format_timeline_summary(phase, event, attempt, reason)
+        timeline.append(
+            {
+                "time": timestamp,
+                "phase": phase,
+                "event": event,
+                "attempt": attempt,
+                "message": reason or raw,
+                "summary": summary,
+                "tone": _timeline_tone(event, raw),
+            }
+        )
+    return timeline[-20:]
+
+
+def _parse_log_fields(line: str) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for match in re.finditer(r"(?P<key>[A-Za-z_][\w.-]*)=(?P<value>\"[^\"]*\"|'[^']*'|\S+)", line):
+        value = match.group("value").strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        fields[match.group("key")] = value
+    return fields
+
+
+def _extract_log_timestamp(line: str) -> str:
+    first = line.split(maxsplit=1)[0] if line else ""
+    return first if re.match(r"^\d{4}-\d{2}-\d{2}", first) else ""
+
+
+def _fallback_phase_label(line: str) -> str:
+    first = line.split(maxsplit=1)[0] if line else ""
+    return first if first else "未记录"
+
+
+def _format_timeline_summary(phase: str, event: str, attempt: str, reason: str) -> str:
+    attempt_text = f" / 第 {attempt} 次" if attempt else ""
+    reason_text = f" / {reason}" if reason else ""
+    return f"{phase}：{event}{attempt_text}{reason_text}"
+
+
+def _timeline_tone(event: str, line: str) -> str:
+    text = f"{event} {line}".lower()
+    if any(keyword in text for keyword in ("halt", "failed", "error", "exception", "timeout")):
+        return "danger"
+    if any(keyword in text for keyword in ("passed", "success", "done", "end", "complete")):
+        return "success"
+    if any(keyword in text for keyword in ("retry", "warning", "pending")):
+        return "warning"
+    return "info"
+
+
+def _extract_failure_reason(final_report: str) -> str:
+    for line in final_report.splitlines():
+        stripped = line.strip().strip("- ")
+        if not stripped:
+            continue
+        lowered = stripped.lower()
+        if "reason" in lowered or "failed" in lowered or "halt" in lowered or "失败" in stripped or "停止" in stripped:
+            return stripped
+    return _last_nonempty_line(final_report)
+
+
+def _last_nonempty_line(text: str) -> str:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    return lines[-1] if lines else ""
+
+
+def _suggest_next_action(phase: str, reason: str) -> str:
+    text = f"{phase} {reason}".lower()
+    if "patch requires approval" in text or "pending" in text or "审批" in reason:
+        return "查看补丁审批区，确认风险后批准并验证或拒绝。"
+    if "hard_checks" in text or "check:" in text or "test" in text or "测试" in reason:
+        return "先查看最终结论和阶段日志，确认测试失败原因后重新运行或调整任务。"
+    if "review" in text or "json" in text:
+        return "查看 Agent 输出和 review JSON，确认模型输出格式后重新运行。"
+    if "safety" in text or "安全" in reason:
+        return "检查允许路径、命令白名单和权限配置。"
+    if "code" in text or "agent" in text:
+        return "查看 Agent 日志，确认模型命令或 patch 输出是否有效。"
+    return "先查看最终结论，再展开诊断日志定位原因。"
+
+
+def _count_jobs_by_status() -> dict[str, int]:
+    return _job_repository().counts_by_status()
+
+
+def _tasks_url(*, status: str, page: int, page_size: int) -> str:
+    normalized_status = status if status in {"all", "running", "done", "failed", "stopped"} else "all"
+    normalized_page = max(page, 1)
+    normalized_page_size = min(max(page_size, 5), 50)
+    return f"/tasks?status={normalized_status}&page={normalized_page}&page_size={normalized_page_size}"
 
 
 def _list_task_templates_with_recent_jobs(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -555,7 +989,7 @@ def _template_id_from_job(job: dict[str, Any]) -> str:
 
 def _status_css_class(status: str) -> str:
     normalized = status.lower().strip()
-    if normalized in {"done", "failed", "running"}:
+    if normalized in {"done", "failed", "running", "stopped"}:
         return normalized
     return "unknown"
 
@@ -746,13 +1180,30 @@ def _load_job_task_context(job: dict[str, Any], run_id: str | None) -> dict[str,
         run_task_path = RUNS_DIR / run_id / "task.json"
         if run_task_path.exists():
             return _load_task_context_from_path(run_task_path)
-    task_path = Path(str(job.get("task_path") or ""))
+    task_path_value = str(job.get("task_path") or "").strip()
+    if not task_path_value:
+        return _load_task_context_from_path(Path(""))
+    task_path = Path(task_path_value)
     return _load_task_context_from_path(task_path)
 
 
+def _task_path_for_job(job: dict[str, Any], run_id: str | None) -> Path | None:
+    if run_id:
+        run_task_path = RUNS_DIR / run_id / "task.json"
+        if run_task_path.exists():
+            return run_task_path
+    task_path_value = str(job.get("task_path") or "").strip()
+    if not task_path_value:
+        return None
+    task_path = Path(task_path_value)
+    return task_path if task_path.exists() and task_path.is_file() else None
+
+
 def _load_task_context_from_path(task_path: Path) -> dict[str, str]:
-    if not task_path.exists():
+    if not str(task_path) or not task_path.exists() or not task_path.is_file():
         return {
+            "task_id": "",
+            "title": "",
             "template_id": "",
             "template_label": "",
             "template_description": "",
@@ -775,6 +1226,8 @@ def _load_task_context_from_path(task_path: Path) -> dict[str, str]:
     if not isinstance(allowed_paths, list):
         allowed_paths = [str(allowed_paths)]
     return {
+        "task_id": str(task.get("task_id") or ""),
+        "title": str(task.get("title") or ""),
         "template_id": str(template.get("id") or template_id),
         "template_label": str(template.get("label") or ""),
         "template_description": str(template.get("description") or ""),

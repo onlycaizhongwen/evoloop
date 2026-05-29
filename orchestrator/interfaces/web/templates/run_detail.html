@@ -11,9 +11,13 @@
     <header class="topbar">
       <div>
         <a href="/" class="back">返回首页</a>
-        <h1>任务结果</h1>
-        <p>{{ state.task_id }} / 第 {{ state.attempt }}/{{ state.max_attempts }} 次尝试</p>
+        <h1>{{ task_meta.task_name }}</h1>
+        <p>{{ task_meta.task_id }} / {{ run_id }} / 第 {{ state.attempt }}/{{ state.max_attempts }} 次尝试</p>
       </div>
+      <nav class="main-nav">
+        <a href="/">新建任务</a>
+        <a class="active" href="/tasks">任务管理</a>
+      </nav>
     </header>
 
     <section class="hero-status {{ summary.tone }}">
@@ -28,22 +32,81 @@
       </div>
     </section>
 
+    {% if failure_hint.enabled %}
+    <section class="alert danger">
+      <strong>{{ failure_hint.title }}</strong>
+      <span>阶段：{{ failure_hint.phase }}</span>
+      <span>原因：{{ failure_hint.reason }}</span>
+      <span>建议：{{ failure_hint.next_action }}</span>
+    </section>
+    {% endif %}
+
     <section class="summary-grid">
       <div class="metric">
-        <span>任务编号</span>
-        <strong>{{ state.task_id }}</strong>
+        <span>任务模板</span>
+        <strong>{{ task_meta.template }}</strong>
+      </div>
+      <div class="metric">
+        <span>执行方式</span>
+        <strong>{{ task_meta.backend }} / {{ task_meta.agent }}</strong>
       </div>
       <div class="metric">
         <span>运行状态</span>
-        <strong>{{ state.status }}</strong>
+        <strong>{{ state.status }} / {{ state.current_phase }}</strong>
       </div>
       <div class="metric">
-        <span>当前阶段</span>
-        <strong>{{ state.current_phase }}</strong>
+        <span>更新时间</span>
+        <strong>{{ task_meta.updated_at }}</strong>
       </div>
-      <div class="metric">
-        <span>补丁状态</span>
-        <strong>{{ summary.patch_stats }}</strong>
+    </section>
+
+    <section class="grid detail-grid">
+      <section class="panel">
+        <h2>执行摘要</h2>
+        <div class="evidence-grid">
+          <div><span>状态</span><strong>{{ execution_summary.status }}</strong></div>
+          <div><span>当前阶段</span><strong>{{ execution_summary.phase }}</strong></div>
+          <div><span>尝试次数</span><strong>{{ execution_summary.attempt }}</strong></div>
+          <div><span>补丁状态</span><strong>{{ execution_summary.patch_stats }}</strong></div>
+          <div><span>Docker 执行</span><strong>{{ execution_summary.docker }}</strong></div>
+          <div><span>更新时间</span><strong>{{ execution_summary.updated_at }}</strong></div>
+        </div>
+        <p class="empty">最近事件：{{ execution_summary.last_event }}</p>
+      </section>
+
+      <section class="panel">
+        <h2>阶段时间线</h2>
+        <div class="timeline">
+          {% for item in phase_timeline %}
+          <div class="timeline-item {{ item.tone }}">
+            <div class="timeline-marker"></div>
+            <div>
+              <div class="timeline-head">
+                <strong>{{ item.phase }}</strong>
+                <span>{{ item.event }}{% if item.attempt %} / 第 {{ item.attempt }} 次{% endif %}</span>
+              </div>
+              <p>{{ item.message }}</p>
+              {% if item.time %}
+              <small>{{ item.time }}</small>
+              {% endif %}
+            </div>
+          </div>
+          {% else %}
+          <p class="empty">暂无阶段时间线。</p>
+          {% endfor %}
+        </div>
+      </section>
+    </section>
+
+    <section class="panel">
+      <div class="section-title compact">
+        <h2>任务操作</h2>
+        <div class="actions">
+          <form method="post" action="/runs/{{ run_id }}/rerun">
+            <button type="submit">重新运行</button>
+          </form>
+          <a class="button secondary" href="/tasks">返回任务列表</a>
+        </div>
       </div>
     </section>
 

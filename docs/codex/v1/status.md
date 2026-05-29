@@ -249,3 +249,12 @@
 - 摘要：新增静态 HTML 预览页，用于直观看到首页任务模板增强效果，包括配置预览、推荐标签、最近运行状态、状态色和 `直接运行` 按钮。
 - 产物：`项目工程文档/WebUI任务模板增强预览.html`
 - 验证：已确认文件生成，大小约 12KB，可直接用浏览器打开查看。
+# 2026-05-27 Web UI Direct Run Duplicate Guard
+
+- 状态：已完成
+- 摘要：首页任务模板 `直接运行` 现在具备前后端双层防重复提交：浏览器提交后按钮禁用并显示 `提交中...`；后端 `/templates/run` 会复用同模板仍在 `running` 的 SQLite Job，避免重复创建任务。
+- 产物：`orchestrator/interfaces/web/main.py`、`orchestrator/interfaces/web/templates/index.html`、`tests/test_web_ui.py`、`docs/codex/v1/plans/web-ui-task-template-management.md`
+- 验证：`python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` 通过，`41 passed`；`python -m py_compile orchestrator/application/task_template_registry.py orchestrator/interfaces/web/main.py` 通过。
+- 2026-05-27 Web UI Task Management Navigation：已完成。新增顶部菜单和 `/tasks` 任务管理页，支持按全部、运行中、已完成、失败筛选 persisted Web Jobs；重复点击模板直接运行时会打开已有任务并显示说明。验证：`python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` 通过，`43 passed`。
+- 2026-05-27 Web UI Task Management Workspace：已完成。`/tasks` 改为左侧菜单工作台布局，任务列表上方提供 `新建任务` 按钮，点击后弹出表单并复用 `/tasks/run` 提交流程。验证：`python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` 通过，`44 passed`。
+- 2026-05-27 Web UI Task List Table：已完成。`/tasks` 任务列表改为真实表格，列为状态、Job ID、Run ID、模板、执行、更新时间、操作，并保留窄屏横向滚动。验证：`python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` 通过，`44 passed`。

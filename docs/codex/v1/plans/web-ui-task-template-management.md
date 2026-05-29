@@ -72,3 +72,99 @@
 - Homepage task template cards now include a `直接运行` action that posts to `/templates/run`.
 - The Web adapter builds the task from the backend whitelist template, writes the same `.omx/web-tasks/*.json` payload as the normal form path, and redirects to the Job status page.
 - Validation: `python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` passed with `40 passed`; `python -m pytest -q` passed with `119 passed`; `python -m py_compile orchestrator/application/task_template_registry.py orchestrator/interfaces/web/main.py` passed.
+## 2026-05-27 Direct Run Duplicate Guard
+
+- `/templates/run` now checks recent persisted Web jobs before creating a new task. If the same template already has a `running` job, it redirects to the existing Job status page instead of starting a duplicate.
+- Homepage template direct-run forms now disable the clicked submit button and show `提交中...` while the browser submits, reducing accidental double clicks.
+- The guard remains backend-authoritative: frontend locking improves usability, while SQLite job reuse prevents duplicate execution even if the same POST arrives twice.
+- Validation: `python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` passed with `41 passed`; `python -m py_compile orchestrator/application/task_template_registry.py orchestrator/interfaces/web/main.py` passed.
+
+## 2026-05-27 Task Management Navigation
+
+- Web UI now has a top navigation menu with `新建任务` and `任务管理`.
+- Added `/tasks`, a task management page backed by persisted SQLite Web jobs. It shows all jobs and filters for `运行中`, `已完成`, and `失败`.
+- Task rows link to the right detail surface: running/failed jobs go to `/jobs/{job_id}`, completed jobs with `run_id` go to `/runs/{run_id}`.
+- When direct-run reuses a running template job, the redirect adds `?reused=1` and the Job Status page shows a visible notice explaining that the existing task was opened.
+- Validation: `python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` passed with `43 passed`.
+
+## 2026-05-27 Task Management Workspace
+
+- `/tasks` is now structured as the primary workspace with a left sidebar menu.
+- The task list header includes a `新建任务` button that opens an in-page modal form instead of sending users back to the homepage.
+- The modal posts to the existing `/tasks/run` endpoint and reuses the same validation/execution path as the original homepage form.
+- Validation: `python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` passed with `44 passed`; `python -m py_compile orchestrator/interfaces/web/main.py` passed.
+
+## 2026-05-27 Task List Table
+
+- The `/tasks` task list now renders as a real HTML table instead of stacked rows.
+- Columns are `状态`, `Job ID`, `Run ID`, `模板`, `执行`, `更新时间`, and `操作`, with horizontal scrolling on narrower screens.
+- Validation: `python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` passed with `44 passed`; `python -m py_compile orchestrator/interfaces/web/main.py` passed.
+
+## 2026-05-27 Sidebar Simplification
+
+- The `/tasks` sidebar now keeps only the `任务管理` menu item.
+- The create action remains in the task list toolbar as the `新建任务` button, which opens the existing in-page modal.
+- Validation: `python -m pytest -q tests/test_web_ui.py` passed with `39 passed`; `python -m pytest -q` passed with `123 passed`.
+
+## 2026-05-27 Task Table Operations And Pagination
+
+- The `/tasks` table now puts `任务名称` first, moves `状态` behind `更新时间`, and keeps Job/Run/template/backend fields for traceability.
+- Each row now exposes `详情`, `停止`, and `删除` actions. Stop marks a running Web job as `stopped`; delete removes the Web job list record without deleting run audit artifacts.
+- The task list supports `page` and `page_size` query parameters, preserves the active status filter, and renders previous/next pagination controls.
+- Validation: `python -m pytest -q tests/test_web_ui.py` passed with `41 passed`; `python -m pytest -q` passed with `125 passed`.
+
+## 2026-05-27 Stop/Delete Guardrails
+
+- Running task lists now auto-refresh every 5 seconds.
+- Stop and delete actions require browser confirmation. The stop confirmation states that the system sends a termination signal to the active local/Docker command when one is registered, otherwise it freezes Web Job state.
+- Job status now renders `stopped` as a visible stopped-request state instead of continuing to look like an active execution.
+- Validation: `python -m pytest -q tests/test_web_ui.py` passed with `41 passed`; `python -m pytest -q` passed with `125 passed`.
+
+## 2026-05-27 Cancellable Web Commands
+
+- Web-started jobs now use a `CancellationRegistry` shared by the Web process.
+- Local and Docker command runners register their active `Popen` under the Web Job ID. Calling `停止` now attempts to terminate the current local/Docker command process tree.
+- If the job is not inside a command runner when stop is clicked, the Web Job is still frozen as `stopped`; if a process is active, it receives a termination signal and the worker preserves the stopped status.
+- Validation: `python -m pytest -q tests/test_command_safety_and_heartbeat.py tests/test_web_ui.py` passed with `53 passed`; `python -m pytest -q` passed with `126 passed`.
+
+## 2026-05-28 Rerun From Detail Pages
+
+- Job status pages and run detail pages now include a `重新运行` action.
+- Rerun copies the original `task.json` into `.omx/web-tasks/`, assigns a new rerun-flavored `task_id/title`, starts a new Web Job, and redirects to the new Job status page.
+- The action works from both pre-run Web jobs and completed/failed run detail pages, so users do not need to manually recreate the task form.
+- Validation: `python -m pytest -q tests/test_web_ui.py` passed with `43 passed`; `python -m pytest -q` passed with `128 passed`.
+
+## 2026-05-28 Legacy Metadata Copy
+
+- Task list copy now renders missing template metadata as `历史任务` instead of `未记录模板`.
+- Missing execution backend metadata now renders as `旧任务未记录`, with muted helper text explaining that early tasks lack backend/template fields.
+- Web background workers now capture the submission-time workspace root for run storage and SQLite updates, avoiding path drift if tests or callers change the process working directory while a worker thread is still running.
+- Validation: `python -m pytest -q tests/test_web_ui.py` passed with `43 passed`; `python -m pytest -q` passed with `128 passed`.
+
+## 2026-05-29 Task Search And Page Size
+
+- `/tasks` now supports a `q` query parameter for searching task name, Task ID, Job ID, Run ID, template, backend, agent, and status text.
+- The task list toolbar includes a search box and page size selector with 5/10/20/50 options.
+- Status filters, pagination links, stop, and delete actions preserve the current search query and page size.
+- Validation: `python -m pytest -q tests/test_web_ui.py` passed with `43 passed`; `python -m pytest -q` passed with `128 passed`.
+
+## 2026-05-29 Detail Page Task Metadata
+
+- Job status and run detail pages now use the task title/name as the main heading instead of generic page titles.
+- Both detail surfaces show task metadata near the top: Task ID, Job/Run ID, template, backend, agent, status, and update time.
+- Job status pages now expose a unified action area with stop, rerun, delete-record, and return-to-list actions. Run detail pages keep rerun and return-to-list actions while preserving run audit artifacts.
+- Validation: `python -m pytest -q tests/test_web_ui.py` passed with `43 passed`; `python -m pytest -q` passed with `128 passed`.
+
+## 2026-05-29 Frontloaded Failure Reason
+
+- Failed Job status pages now show a top-level `失败原因` card with phase, reason, and suggested next action.
+- Halted/Retrying Run detail pages now extract the first useful reason from `final_report.md`, falling back to `phase.log` or current phase.
+- Suggested next actions are phase-aware for patch approval, hard checks/tests, review JSON issues, safety policy failures, and agent/code phases.
+- Validation: `python -m pytest -q tests/test_web_ui.py` passed with `45 passed`; `python -m pytest -q` passed with `130 passed`.
+
+## 2026-05-29 Run Detail Execution Summary And Timeline
+
+- Run detail pages now show an `执行摘要` panel near the top with status, phase, attempt count, patch approval counts, Docker evidence state, update time, and latest phase event.
+- `logs/phase.log` is parsed into a tolerant `阶段时间线` list. It supports structured `key=value` phase logger lines and simpler legacy lines used by older tests/runs.
+- Docker sandbox evidence is loaded once per run detail request and reused by both the summary panel and diagnostics section.
+- Validation: `python -m pytest -q tests/test_web_ui.py` passed with `45 passed`; `python -m pytest -q` passed with `130 passed`.

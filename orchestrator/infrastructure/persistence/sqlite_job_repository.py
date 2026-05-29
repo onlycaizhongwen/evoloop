@@ -73,6 +73,45 @@ class SQLiteJobRepository:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def list_page(self, *, limit: int = 20, offset: int = 0, status: str | None = None) -> list[dict[str, Any]]:
+        query = """
+            SELECT job_id, status, message, task_path, run_id, started_at, finished_at, updated_at
+            FROM web_jobs
+        """
+        params: list[Any] = []
+        if status:
+            query += " WHERE status = ?"
+            params.append(status)
+        query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+        with self._connect() as connection:
+            rows = connection.execute(query, params).fetchall()
+        return [dict(row) for row in rows]
+
+    def count(self, status: str | None = None) -> int:
+        query = "SELECT COUNT(*) FROM web_jobs"
+        params: list[Any] = []
+        if status:
+            query += " WHERE status = ?"
+            params.append(status)
+        with self._connect() as connection:
+            row = connection.execute(query, params).fetchone()
+        return int(row[0]) if row else 0
+
+    def counts_by_status(self) -> dict[str, int]:
+        counts = {"all": self.count(), "running": 0, "done": 0, "failed": 0, "stopped": 0}
+        with self._connect() as connection:
+            rows = connection.execute("SELECT status, COUNT(*) AS total FROM web_jobs GROUP BY status").fetchall()
+        for row in rows:
+            status = str(row["status"])
+            if status in counts:
+                counts[status] = int(row["total"])
+        return counts
+
+    def delete(self, job_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute("DELETE FROM web_jobs WHERE job_id = ?", (job_id,))
+
     def _connect(self) -> sqlite3.Connection:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self.db_path)

@@ -9,13 +9,25 @@ from pathlib import Path
 
 from orchestrator.domain.models.run_state import RunState
 from orchestrator.domain.models.task import TaskConfig
+from orchestrator.infrastructure.command.cancellation import (
+    CancellationRegistry,
+    CommandCancelled,
+    terminate_process_tree,
+)
 from orchestrator.infrastructure.command.command_result import CommandExecutionResult
 from orchestrator.ports.heartbeat_port import HeartbeatPort
 
 
 class DockerSandboxRunner:
-    def __init__(self, heartbeat: HeartbeatPort | None = None):
+    def __init__(
+        self,
+        heartbeat: HeartbeatPort | None = None,
+        cancellation_registry: CancellationRegistry | None = None,
+        cancellation_key: str | None = None,
+    ):
         self.heartbeat = heartbeat
+        self.cancellation_registry = cancellation_registry
+        self.cancellation_key = cancellation_key
 
     def run(
         self,
@@ -35,28 +47,35 @@ class DockerSandboxRunner:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        while True:
-            try:
-                stdout, stderr = process.communicate(timeout=task.heartbeat_interval_seconds)
-                break
-            except subprocess.TimeoutExpired:
-                if state and self.heartbeat:
-                    elapsed = int(time.monotonic() - started_at)
-                    self.heartbeat.beat(state, phase, f"status=running backend=docker elapsed={elapsed}s")
-                if time.monotonic() - started_at > task.command_timeout_seconds:
-                    self._terminate_container(process)
-                    stdout, stderr = process.communicate()
-                    duration = time.monotonic() - started_at
-                    result = CommandExecutionResult(
-                        command=docker_command,
-                        exit_code=124,
-                        stdout=stdout or "",
-                        stderr=(stderr or "") + f"\ndocker command timed out after {task.command_timeout_seconds}s",
-                        duration_seconds=duration,
-                        timed_out=True,
-                    )
-                    self._write_log(task, state, phase, command, docker_command, result)
-                    return result
+        self._register_process(process)
+        try:
+            while True:
+                try:
+                    stdout, stderr = process.communicate(timeout=task.heartbeat_interval_seconds)
+                    break
+                except subprocess.TimeoutExpired:
+                    self._raise_if_cancelled(process)
+                    if state and self.heartbeat:
+                        elapsed = int(time.monotonic() - started_at)
+                        self.heartbeat.beat(state, phase, f"status=running backend=docker elapsed={elapsed}s")
+                    if time.monotonic() - started_at > task.command_timeout_seconds:
+                        self._terminate_container(process)
+                        stdout, stderr = process.communicate()
+                        duration = time.monotonic() - started_at
+                        result = CommandExecutionResult(
+                            command=docker_command,
+                            exit_code=124,
+                            stdout=stdout or "",
+                            stderr=(stderr or "") + f"\ndocker command timed out after {task.command_timeout_seconds}s",
+                            duration_seconds=duration,
+                            timed_out=True,
+                        )
+                        self._write_log(task, state, phase, command, docker_command, result)
+                        return result
+        finally:
+            self._unregister_process(process)
+
+        self._raise_if_cancelled(process)
 
         duration = time.monotonic() - started_at
         result = CommandExecutionResult(
@@ -145,17 +164,22 @@ class DockerSandboxRunner:
             file.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
     def _terminate_container(self, process: subprocess.Popen[str]) -> None:
-        if process.poll() is not None:
-            return
-        if sys.platform == "win32":
-            subprocess.run(
-                ["taskkill", "/F", "/T", "/PID", str(process.pid)],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-            )
-            return
-        process.kill()
+        terminate_process_tree(process)
+
+    def _register_process(self, process: subprocess.Popen[str]) -> None:
+        if self.cancellation_registry and self.cancellation_key:
+            self.cancellation_registry.register(self.cancellation_key, process)
+
+    def _unregister_process(self, process: subprocess.Popen[str]) -> None:
+        if self.cancellation_registry and self.cancellation_key:
+            self.cancellation_registry.unregister(self.cancellation_key, process)
+
+    def _raise_if_cancelled(self, process: subprocess.Popen[str]) -> None:
+        if self.cancellation_registry and self.cancellation_key and self.cancellation_registry.is_cancelled(
+            self.cancellation_key
+        ):
+            terminate_process_tree(process)
+            raise CommandCancelled(f"command cancelled: {self.cancellation_key}")
 
     def _quote(self, value: str) -> str:
         if sys.platform == "win32":

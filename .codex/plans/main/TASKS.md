@@ -288,3 +288,12 @@
 - 摘要：Web 首页、Job 状态页、Run 详情页和后端动态文案已恢复为正常 UTF-8 中文。
 - 产物：`orchestrator/interfaces/web/main.py`，`orchestrator/interfaces/web/templates/index.html`，`orchestrator/interfaces/web/templates/job_status.html`，`orchestrator/interfaces/web/templates/run_detail.html`
 - 验证：Web 首页 `status=200`，包含“新建任务”和 `omx_team_patch`，无典型乱码 `锛`；全量 `python -m pytest -q` 为 `76 passed`。
+# 2026-05-27 Web UI Direct Run Duplicate Guard
+
+- 状态：已完成
+- 摘要：`/templates/run` 复用同模板运行中的 persisted Job，首页直接运行按钮提交后进入 `提交中...` 禁用态，降低重复提交风险。
+- 产物：`orchestrator/interfaces/web/main.py`、`orchestrator/interfaces/web/templates/index.html`、`tests/test_web_ui.py`
+- 验证：`python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` 通过，`41 passed`；`python -m py_compile orchestrator/application/task_template_registry.py orchestrator/interfaces/web/main.py` 通过。
+- 2026-05-27 Web UI Task Management Navigation：已完成。新增顶部菜单和 `/tasks` 任务管理页，支持按全部、运行中、已完成、失败筛选 persisted Web Jobs；重复模板运行会打开已有 Job 并显示说明。验证：`python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` 通过，`43 passed`。
+- 2026-05-27 Web UI Task Management Workspace：已完成。`/tasks` 改为左侧菜单工作台布局，任务列表上方提供 `新建任务` 按钮，点击后弹出表单并复用 `/tasks/run` 提交流程。验证：`python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` 通过，`44 passed`。
+- 2026-05-27 Web UI Task List Table：已完成。`/tasks` 任务列表改为真实表格，列为状态、Job ID、Run ID、模板、执行、更新时间、操作，并保留窄屏横向滚动。验证：`python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` 通过，`44 passed`。

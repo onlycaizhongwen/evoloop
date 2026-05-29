@@ -36,6 +36,7 @@ def test_job_status_reads_persisted_job(monkeypatch, tmp_path: Path):
         json.dumps(
             {
                 "task_id": "task-job-context",
+                "title": "Job 详情任务",
                 "template_id": "docker_patch_json",
                 "execution_backend": "docker",
                 "agent_mode": "omx_patch",
@@ -61,11 +62,115 @@ def test_job_status_reads_persisted_job(monkeypatch, tmp_path: Path):
 
     assert response.status_code == 200
     assert "job-test" in response.text
+    assert "Job 详情任务" in response.text
+    assert "task-job-context / job-test" in response.text
     assert "running" in response.text
     assert "启动配置" in response.text
     assert "Docker Patch JSON" in response.text
     assert "docker_patch_json" in response.text
     assert "patch_json_backend" in response.text
+    assert 'action="/jobs/job-test/rerun"' in response.text
+    assert 'action="/tasks/job-test/stop"' in response.text
+    assert 'action="/tasks/job-test/delete"' in response.text
+    assert "重新运行" in response.text
+    assert "停止任务" in response.text
+    assert "删除记录" in response.text
+
+
+def test_job_status_reruns_task_from_original_task_json(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    task_path = tmp_path / ".omx" / "web-tasks" / "task-rerun-source.json"
+    task_path.parent.mkdir(parents=True)
+    task_path.write_text(
+        json.dumps(
+            {
+                "task_id": "task-rerun-source",
+                "title": "原始任务",
+                "description": "rerun me",
+                "change_type": "bugfix",
+                "repo_path": str(tmp_path),
+                "worktree_path": str(tmp_path),
+                "allowed_paths": ["calculator.py"],
+                "forbidden_paths": [".env"],
+                "allowed_command_prefixes": ["python"],
+                "execution_backend": "local",
+                "check_commands": {"test": None, "lint": None, "typecheck": None},
+                "agent_mode": "mock",
+                "agent_commands": {"patch_coder": None, "patch_fixer": None, "reviewer": None},
+                "max_attempts": 1,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    SQLiteJobRepository(tmp_path / ".omx" / "orchestrator.db").create(
+        {
+            "job_id": "job-rerun-source",
+            "status": "failed",
+            "message": "failed",
+            "task_path": str(task_path),
+            "run_id": "",
+        }
+    )
+
+    response = TestClient(app).post("/jobs/job-rerun-source/rerun", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"].startswith("/jobs/job-")
+    copied_tasks = sorted((tmp_path / ".omx" / "web-tasks").glob("task-rerun-source-rerun-*.json"))
+    assert copied_tasks
+    copied = json.loads(copied_tasks[-1].read_text(encoding="utf-8"))
+    assert copied["task_id"].startswith("task-rerun-source-rerun-")
+    assert copied["title"].endswith("（重新运行）")
+
+
+def test_job_status_shows_reused_template_notice(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    task_path = tmp_path / ".omx" / "web-tasks" / "task-reused-template.json"
+    task_path.parent.mkdir(parents=True)
+    task_path.write_text(
+        json.dumps({"task_id": "task-reused-template", "template_id": "docker_team_patch"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    SQLiteJobRepository(tmp_path / ".omx" / "orchestrator.db").create(
+        {
+            "job_id": "job-reused-template",
+            "status": "running",
+            "message": "running",
+            "task_path": str(task_path),
+            "run_id": "",
+        }
+    )
+
+    response = TestClient(app).get("/jobs/job-reused-template?reused=1")
+
+    assert response.status_code == 200
+    assert "该模板已有任务运行中" in response.text
+    assert "任务管理" in response.text
+
+
+def test_job_status_frontloads_failed_reason(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    task_path = tmp_path / ".omx" / "web-tasks" / "task-failed-reason.json"
+    task_path.parent.mkdir(parents=True)
+    task_path.write_text('{"task_id": "task-failed-reason"}', encoding="utf-8")
+    SQLiteJobRepository(tmp_path / ".omx" / "orchestrator.db").create(
+        {
+            "job_id": "job-failed-reason",
+            "status": "failed",
+            "message": "任务未完成，停在 review 阶段。",
+            "task_path": str(task_path),
+            "run_id": "",
+        }
+    )
+
+    response = TestClient(app).get("/jobs/job-failed-reason")
+
+    assert response.status_code == 200
+    assert "失败原因" in response.text
+    assert "阶段：未记录" in response.text
+    assert "任务未完成，停在 review 阶段。" in response.text
+    assert "review JSON" in response.text
 
 
 def test_job_status_infers_run_and_shows_progress(monkeypatch, tmp_path: Path):
@@ -117,7 +222,7 @@ def test_job_status_infers_run_and_shows_progress(monkeypatch, tmp_path: Path):
     assert "1/2" in response.text
     assert "phase=quality_gate" in response.text
     assert "review running" in response.text
-    assert "任务已提交" in response.text
+    assert "task-progress / job-progress" in response.text
     assert "锛" not in response.text
     assert "启动配置" in response.text
     assert job is not None
@@ -158,8 +263,30 @@ def test_run_detail_shows_no_docker_evidence_for_local_run(monkeypatch, tmp_path
     response = TestClient(app).get("/runs/run-local")
 
     assert response.status_code == 200
+    assert "执行摘要" in response.text
+    assert "Docker 执行" in response.text
+    assert "无记录" in response.text
     assert "Docker 执行证据" in response.text
     assert "本次运行没有 Docker sandbox 执行记录" in response.text
+
+
+def test_run_detail_frontloads_halted_failure_reason(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    run_dir = tmp_path / ".omx" / "runs" / "run-halted-reason"
+    _write_run_state(tmp_path, "run-halted-reason", "task-halted-reason", RunStatus.HALTED, "hard_checks")
+    (run_dir / "final_report.md").write_text("Reason: pytest failed on calculator test\nMore details", encoding="utf-8")
+    (run_dir / "logs" / "phase.log").write_text("phase=hard_checks event=halt\n", encoding="utf-8")
+
+    response = TestClient(app).get("/runs/run-halted-reason")
+
+    assert response.status_code == 200
+    assert "失败原因" in response.text
+    assert "阶段：hard_checks" in response.text
+    assert "Reason: pytest failed on calculator test" in response.text
+    assert "确认测试失败原因" in response.text
+    assert "阶段时间线" in response.text
+    assert "hard_checks" in response.text
+    assert "halt" in response.text
 
 
 def test_run_detail_shows_task_template_context(monkeypatch, tmp_path: Path):
@@ -170,6 +297,7 @@ def test_run_detail_shows_task_template_context(monkeypatch, tmp_path: Path):
         json.dumps(
             {
                 "task_id": "task-template-context",
+                "title": "Run 详情任务",
                 "template_id": "docker_team_patch",
                 "execution_backend": "docker",
                 "agent_mode": "omx_team_patch",
@@ -189,6 +317,9 @@ def test_run_detail_shows_task_template_context(monkeypatch, tmp_path: Path):
     response = TestClient(app).get("/runs/run-template-context")
 
     assert response.status_code == 200
+    assert "Run 详情任务" in response.text
+    assert "task-template-context / run-template-context" in response.text
+    assert "docker / omx_team_patch" in response.text
     assert "启动配置" in response.text
     assert "Docker OMX Team Patch" in response.text
     assert "docker_team_patch" in response.text
@@ -196,6 +327,42 @@ def test_run_detail_shows_task_template_context(monkeypatch, tmp_path: Path):
     assert "omx_team_patch" in response.text
     assert "python -m unittest -q" in response.text
     assert "docker_team_backend.py" in response.text
+    assert 'action="/runs/run-template-context/rerun"' in response.text
+
+
+def test_run_detail_reruns_task_from_run_task_json(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    run_dir = tmp_path / ".omx" / "runs" / "run-rerun-source"
+    _write_run_state(tmp_path, "run-rerun-source", "task-run-rerun-source", RunStatus.DONE, "done")
+    (run_dir / "task.json").write_text(
+        json.dumps(
+            {
+                "task_id": "task-run-rerun-source",
+                "title": "Run 原始任务",
+                "description": "rerun me",
+                "change_type": "bugfix",
+                "repo_path": str(tmp_path),
+                "worktree_path": str(tmp_path),
+                "allowed_paths": ["calculator.py"],
+                "forbidden_paths": [".env"],
+                "allowed_command_prefixes": ["python"],
+                "execution_backend": "local",
+                "check_commands": {"test": None, "lint": None, "typecheck": None},
+                "agent_mode": "mock",
+                "agent_commands": {"patch_coder": None, "patch_fixer": None, "reviewer": None},
+                "max_attempts": 1,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    response = TestClient(app).post("/runs/run-rerun-source/rerun", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"].startswith("/jobs/job-")
+    copied_tasks = sorted((tmp_path / ".omx" / "web-tasks").glob("task-run-rerun-source-rerun-*.json"))
+    assert copied_tasks
 
 
 def test_run_detail_infers_command_preset_for_legacy_task(monkeypatch, tmp_path: Path):
@@ -273,6 +440,206 @@ def test_web_index_shows_persisted_jobs(monkeypatch, tmp_path: Path):
     assert response.status_code == 200
     assert "job-test" in response.text
     assert "running" in response.text
+    assert 'href="/tasks"' in response.text
+    assert "任务管理" in response.text
+
+
+def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+    running_task = tmp_path / ".omx" / "web-tasks" / "task-running-template.json"
+    done_task = tmp_path / ".omx" / "web-tasks" / "task-done-template.json"
+    running_task.parent.mkdir(parents=True)
+    running_task.write_text(
+        json.dumps(
+            {"task_id": "task-running-template", "title": "运行中模板任务", "template_id": "docker_team_patch"},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    done_task.write_text(
+        json.dumps(
+            {"task_id": "task-done-template", "title": "已完成模板任务", "template_id": "docker_patch_json"},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    repository = SQLiteJobRepository(tmp_path / ".omx" / "orchestrator.db")
+    repository.create(
+        {
+            "job_id": "job-running-template",
+            "status": "running",
+            "message": "running",
+            "task_path": str(running_task),
+            "run_id": "",
+        }
+    )
+    repository.create(
+        {
+            "job_id": "job-done-template",
+            "status": "done",
+            "message": "done",
+            "task_path": str(done_task),
+            "run_id": "run-done-template",
+        }
+    )
+
+    response = TestClient(app).get("/tasks")
+
+    assert response.status_code == 200
+    assert "任务管理" in response.text
+    assert "运行中" in response.text
+    assert "已完成" in response.text
+    assert "job-running-template" in response.text
+    assert "job-done-template" in response.text
+    assert "Docker OMX Team Patch" in response.text
+    assert "Docker Patch JSON" in response.text
+    assert "<table" in response.text
+    assert "<th>任务名称</th>" in response.text
+    assert "<th>Job ID</th>" in response.text
+    assert "<th>Run ID</th>" in response.text
+    assert "<th>模板</th>" in response.text
+    assert "<th>执行</th>" in response.text
+    assert response.text.index("<th>任务名称</th>") < response.text.index("<th>Job ID</th>")
+    assert response.text.index("<th>更新时间</th>") < response.text.index("<th>状态</th>")
+    assert "运行中模板任务" in response.text
+    assert "已完成模板任务" in response.text
+    assert 'href="/jobs/job-running-template"' in response.text
+    assert 'href="/runs/run-done-template"' in response.text
+    assert 'action="/tasks/job-running-template/stop?status=all&page=1&page_size=10&q="' in response.text
+    assert 'action="/tasks/job-running-template/delete?status=all&page=1&page_size=10&q="' in response.text
+    assert "停止" in response.text
+    assert "删除" in response.text
+    assert 'data-confirm="确认停止该任务？系统会向当前 local/Docker 命令发送终止信号；若任务尚未进入命令执行阶段，则冻结 Web 状态。"' in response.text
+    assert 'data-confirm="确认从任务列表移除该记录？run 目录和审计日志会保留。"' in response.text
+    assert "共 2 条，第 1 / 1 页" in response.text
+    assert 'class="sidebar"' in response.text
+    assert '<nav class="side-nav">\n        <a class="active" href="/tasks">任务管理</a>\n      </nav>' in response.text
+    assert 'data-open-modal="task-create-modal"' in response.text
+    assert 'id="task-create-modal"' in response.text
+    assert 'action="/tasks/run"' in response.text
+    assert 'name="q"' in response.text
+    assert 'placeholder="任务名称、Task ID、Job ID、Run ID、模板"' in response.text
+    assert 'name="page_size"' in response.text
+    assert 'name="task_id"' in response.text
+    assert 'name="description"' in response.text
+    assert 'name="command_preset"' in response.text
+    assert "提交任务" in response.text
+
+    filtered = TestClient(app).get("/tasks?status=running")
+
+    assert filtered.status_code == 200
+    assert "job-running-template" in filtered.text
+    assert "job-done-template" not in filtered.text
+    assert '<meta http-equiv="refresh" content="5">' in filtered.text
+    assert "运行中列表会自动刷新" in filtered.text
+
+    searched = TestClient(app).get("/tasks?q=已完成模板任务")
+
+    assert searched.status_code == 200
+    assert "job-done-template" in searched.text
+    assert "job-running-template" not in searched.text
+    assert 'value="已完成模板任务"' in searched.text
+
+
+def test_task_manager_paginates_jobs(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+    task_dir = tmp_path / ".omx" / "web-tasks"
+    task_dir.mkdir(parents=True)
+    repository = SQLiteJobRepository(tmp_path / ".omx" / "orchestrator.db")
+    for index in range(12):
+        task_path = task_dir / f"task-page-{index:02d}.json"
+        task_path.write_text(
+            json.dumps({"task_id": f"task-page-{index:02d}", "title": f"分页任务 {index:02d}"}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        repository.create(
+            {
+                "job_id": f"job-page-{index:02d}",
+                "status": "failed",
+                "message": "failed",
+                "task_path": str(task_path),
+                "run_id": "",
+                "updated_at": f"2026-05-27T10:{index:02d}:00",
+            }
+        )
+
+    response = TestClient(app).get("/tasks?status=failed&page=2&page_size=5")
+
+    assert response.status_code == 200
+    assert "共 12 条，第 2 / 3 页" in response.text
+    assert 'href="/tasks?status=failed&page=1&page_size=5&q="' in response.text
+    assert 'href="/tasks?status=failed&page=3&page_size=5&q="' in response.text
+    assert "job-page-06" in response.text
+    assert "job-page-05" in response.text
+    assert "job-page-11" not in response.text
+
+    searched = TestClient(app).get("/tasks?status=failed&q=分页任务 11&page=1&page_size=5")
+
+    assert searched.status_code == 200
+    assert "共 1 条，第 1 / 1 页" in searched.text
+    assert "job-page-11" in searched.text
+    assert "job-page-10" not in searched.text
+
+
+def test_task_manager_stops_and_deletes_jobs(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+    repository = SQLiteJobRepository(tmp_path / ".omx" / "orchestrator.db")
+    repository.create(
+        {
+            "job_id": "job-stop-delete",
+            "status": "running",
+            "message": "running",
+            "task_path": "",
+            "run_id": "",
+        }
+    )
+    client = TestClient(app)
+
+    stop_response = client.post("/tasks/job-stop-delete/stop?status=running&page=1&page_size=10", follow_redirects=False)
+
+    assert stop_response.status_code == 303
+    assert stop_response.headers["location"] == "/tasks?status=running&page=1&page_size=10"
+    stopped = repository.get("job-stop-delete")
+    assert stopped is not None
+    assert stopped["status"] == "stopped"
+    assert "停止请求" in stopped["message"]
+    assert "冻结" in stopped["message"]
+
+    stopped_detail = client.get("/jobs/job-stop-delete")
+    assert stopped_detail.status_code == 200
+    assert "已提交停止请求" in stopped_detail.text
+
+    delete_response = client.post("/tasks/job-stop-delete/delete?status=all&page=1&page_size=10", follow_redirects=False)
+
+    assert delete_response.status_code == 303
+    assert delete_response.headers["location"] == "/tasks?status=all&page=1&page_size=10"
+    assert repository.get("job-stop-delete") is None
+
+
+def test_task_manager_tolerates_legacy_job_without_task_path(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+    SQLiteJobRepository(tmp_path / ".omx" / "orchestrator.db").create(
+        {
+            "job_id": "job-legacy-empty-task-path",
+            "status": "running",
+            "message": "legacy",
+            "task_path": "",
+            "run_id": "",
+        }
+    )
+
+    response = TestClient(app).get("/tasks")
+
+    assert response.status_code == 200
+    assert "job-legacy-empty-task-path" in response.text
+    assert "历史任务" in response.text
+    assert "旧任务未记录" in response.text
+    assert "早期任务缺少模板元数据" in response.text
+    assert "早期任务缺少执行后端元数据" in response.text
 
 
 def test_web_index_shows_recent_job_on_template_card(monkeypatch, tmp_path: Path):
@@ -439,6 +806,8 @@ def test_web_index_exposes_task_template_selector(monkeypatch, tmp_path: Path):
     assert "Paths: calculator.py, test_calculator.py, docker_team_backend.py" in response.text
     assert 'action="/templates/run"' in response.text
     assert "直接运行" in response.text
+    assert 'data-submitting-text="提交中..."' in response.text
+    assert 'button.disabled = true' in response.text
 
 
 def test_web_index_applies_docker_team_template(monkeypatch, tmp_path: Path):
@@ -789,6 +1158,40 @@ def test_template_direct_run_uses_whitelisted_template(monkeypatch, tmp_path: Pa
     assert task["task_id"] == "task-docker-team-web-001"
     assert task["execution_backend"] == "docker"
     assert task["agent_commands"]["patch_coder"] == "python /worktree/docker_team_backend.py {task_id} {prompt_file}"
+
+
+def test_template_direct_run_reuses_running_job_for_same_template(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+    task_path = tmp_path / ".omx" / "web-tasks" / "task-running-template.json"
+    task_path.parent.mkdir(parents=True)
+    task_path.write_text(
+        json.dumps({"task_id": "task-running-template", "template_id": "docker_team_patch"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    SQLiteJobRepository(tmp_path / ".omx" / "orchestrator.db").create(
+        {
+            "job_id": "job-existing-template",
+            "status": "running",
+            "message": "running",
+            "task_path": str(task_path),
+            "run_id": "",
+        }
+    )
+
+    def fail_start(task_path: Path, *, agent_mode: str, real_checks: bool) -> str:
+        raise AssertionError("duplicate template direct run should reuse the existing running job")
+
+    monkeypatch.setattr("orchestrator.interfaces.web.main._start_background_run", fail_start)
+
+    response = TestClient(app).post(
+        "/templates/run",
+        data={"template_id": "docker_team_patch"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/jobs/job-existing-template?reused=1"
 
 
 def test_default_smoke_worktree_includes_docker_agent_backends(monkeypatch, tmp_path: Path):

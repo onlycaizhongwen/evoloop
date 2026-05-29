@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import sys
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -11,6 +13,7 @@ from orchestrator.domain.models.task import CheckCommands, TaskConfig
 from orchestrator.domain.services.exceptions import SafetyViolation
 from orchestrator.domain.services.safety_policy import SafetyPolicy
 from orchestrator.infrastructure.checks.shell_check_runner import ShellCheckRunner
+from orchestrator.infrastructure.command.cancellation import CancellationRegistry, CommandCancelled
 from orchestrator.infrastructure.command.command_result import CommandExecutionResult
 from orchestrator.infrastructure.command.docker_sandbox_runner import DockerSandboxRunner
 from orchestrator.infrastructure.command.safe_command_runner import SafeCommandRunner
@@ -104,6 +107,30 @@ def test_timeout_returns_124_for_child_process(tmp_path: Path):
     assert result.exit_code == 124
     assert result.timed_out
     assert "command timed out after 1s" in result.stderr
+
+
+def test_cancellation_registry_terminates_running_local_command(tmp_path: Path):
+    task = make_task(tmp_path, command_timeout=30, heartbeat_interval=1)
+    registry = CancellationRegistry()
+    runner = SafeCommandRunner(cancellation_registry=registry, cancellation_key="job-cancel-test")
+    command = f"\"{sys.executable}\" -c \"import time; time.sleep(30)\""
+    errors: list[BaseException] = []
+
+    def run_command() -> None:
+        try:
+            runner.run(task, command, phase="test")
+        except BaseException as exc:
+            errors.append(exc)
+
+    thread = threading.Thread(target=run_command)
+    thread.start()
+    deadline = time.monotonic() + 5
+    while not registry.cancel("job-cancel-test") and time.monotonic() < deadline:
+        time.sleep(0.05)
+    thread.join(timeout=5)
+
+    assert not thread.is_alive()
+    assert any(isinstance(error, CommandCancelled) for error in errors)
 
 
 class RecordingRunner:

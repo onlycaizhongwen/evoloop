@@ -12,31 +12,79 @@
     <header class="topbar">
       <div>
         <a href="/" class="back">返回首页</a>
-        <h1>任务已提交</h1>
-        <p>{{ job_id }}</p>
+        <h1>{{ task_meta.task_name }}</h1>
+        <p>{{ task_meta.task_id }} / {{ job_id }}</p>
       </div>
+      <nav class="main-nav">
+        <a href="/">新建任务</a>
+        <a class="active" href="/tasks">任务管理</a>
+      </nav>
     </header>
 
-    <section class="hero-status {% if job.status == 'failed' %}danger{% else %}info{% endif %}">
+    {% if reused_existing_job %}
+    <section class="alert info">
+      <strong>该模板已有任务运行中</strong>
+      <span>系统已为你打开现有任务，避免重复启动同一模板。</span>
+    </section>
+    {% endif %}
+
+    <section class="hero-status {% if job.status == 'failed' %}danger{% elif job.status == 'stopped' %}warning{% else %}info{% endif %}">
       <div>
         <p class="eyebrow">当前状态</p>
-        <h2>{% if job.status == "failed" %}启动失败{% else %}OMX/Codex 正在执行{% endif %}</h2>
+        <h2>{% if job.status == "failed" %}启动失败{% elif job.status == "stopped" %}已提交停止请求{% else %}OMX/Codex 正在执行{% endif %}</h2>
         <p>{{ job.message }}</p>
       </div>
       <div class="next-action">
         <strong>下一步</strong>
-        <span>页面每 3 秒自动刷新。真实模型执行时不要重复点击提交按钮。</span>
+        <span>{% if job.status == "stopped" %}返回任务管理查看其他任务；run 审计产物会继续保留。{% else %}页面每 3 秒自动刷新。真实模型执行时不要重复点击提交按钮。{% endif %}</span>
       </div>
     </section>
 
+    {% if failure_hint.enabled %}
+    <section class="alert danger">
+      <strong>{{ failure_hint.title }}</strong>
+      <span>阶段：{{ failure_hint.phase }}</span>
+      <span>原因：{{ failure_hint.reason }}</span>
+      <span>建议：{{ failure_hint.next_action }}</span>
+    </section>
+    {% endif %}
+
     <section class="summary-grid two">
       <div class="metric">
-        <span>任务文件</span>
-        <strong>{{ job.task_path }}</strong>
+        <span>任务模板</span>
+        <strong>{{ task_meta.template }}</strong>
+      </div>
+      <div class="metric">
+        <span>执行方式</span>
+        <strong>{{ task_meta.backend }} / {{ task_meta.agent }}</strong>
       </div>
       <div class="metric">
         <span>运行编号</span>
         <strong>{{ run_id or "创建中" }}</strong>
+      </div>
+      <div class="metric">
+        <span>更新时间</span>
+        <strong>{{ task_meta.updated_at }}</strong>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title compact">
+        <h2>任务操作</h2>
+        <div class="actions">
+          {% if job.status == "running" %}
+          <form method="post" action="/tasks/{{ job_id }}/stop">
+            <button type="submit" class="secondary" data-confirm="确认停止该任务？系统会向当前 local/Docker 命令发送终止信号；若任务尚未进入命令执行阶段，则冻结 Web 状态。">停止任务</button>
+          </form>
+          {% endif %}
+          <form method="post" action="/jobs/{{ job_id }}/rerun">
+            <button type="submit">重新运行</button>
+          </form>
+          <form method="post" action="/tasks/{{ job_id }}/delete">
+            <button type="submit" class="danger" data-confirm="确认从任务列表移除该记录？run 目录和审计日志会保留。">删除记录</button>
+          </form>
+          <a class="button secondary" href="/tasks">返回任务列表</a>
+        </div>
       </div>
     </section>
 
@@ -44,6 +92,7 @@
       <h2>启动配置</h2>
       <div class="evidence-grid">
         <div><span>任务模板</span><strong>{{ task_context.template_label or task_context.template_id or "未记录" }}</strong></div>
+        <div><span>任务文件</span><strong>{{ job.task_path }}</strong></div>
         <div><span>模板 ID</span><strong>{{ task_context.template_id or "未记录" }}</strong></div>
         <div><span>Execution backend</span><strong>{{ task_context.execution_backend or "未记录" }}</strong></div>
         <div><span>Agent</span><strong>{{ task_context.agent_mode or "未记录" }}</strong></div>
@@ -103,5 +152,14 @@
     </section>
     {% endif %}
   </main>
+  <script>
+    document.querySelectorAll("[data-confirm]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        if (!window.confirm(button.dataset.confirm)) {
+          event.preventDefault();
+        }
+      });
+    });
+  </script>
 </body>
 </html>

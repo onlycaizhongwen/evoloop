@@ -6,6 +6,7 @@ from orchestrator.domain.enums import ExecutionBackend
 from orchestrator.domain.models.run_state import RunState
 from orchestrator.domain.models.task import TaskConfig
 from orchestrator.domain.services.safety_policy import SafetyPolicy
+from orchestrator.infrastructure.command.cancellation import CancellationRegistry
 from orchestrator.infrastructure.command.command_result import CommandExecutionResult
 from orchestrator.infrastructure.command.docker_sandbox_runner import DockerSandboxRunner
 from orchestrator.infrastructure.command.local_command_runner import LocalCommandRunner
@@ -19,11 +20,21 @@ class SafeCommandRunner:
         heartbeat: HeartbeatPort | None = None,
         local_runner: LocalCommandRunner | None = None,
         docker_runner: DockerSandboxRunner | None = None,
+        cancellation_registry: CancellationRegistry | None = None,
+        cancellation_key: str | None = None,
     ):
         self.safety_policy = safety_policy or SafetyPolicy()
         self.heartbeat = heartbeat
-        self.local_runner = local_runner or LocalCommandRunner(heartbeat=heartbeat)
-        self.docker_runner = docker_runner or DockerSandboxRunner(heartbeat=heartbeat)
+        self.local_runner = local_runner or LocalCommandRunner(
+            heartbeat=heartbeat,
+            cancellation_registry=cancellation_registry,
+            cancellation_key=cancellation_key,
+        )
+        self.docker_runner = docker_runner or DockerSandboxRunner(
+            heartbeat=heartbeat,
+            cancellation_registry=cancellation_registry,
+            cancellation_key=cancellation_key,
+        )
 
     def run(
         self,

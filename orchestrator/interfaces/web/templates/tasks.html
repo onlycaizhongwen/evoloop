@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% if auto_refresh %}<meta http-equiv="refresh" content="5">{% endif %}
+  <title>任务管理</title>
+  <link rel="stylesheet" href="/static/styles.css?v=task-table-actions-20260527">
+</head>
+<body>
+  <main class="app-layout">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <strong>Auto Evolution</strong>
+        <span>Orchestrator</span>
+      </div>
+      <nav class="side-nav">
+        <a class="active" href="/tasks">任务管理</a>
+      </nav>
+    </aside>
+
+    <section class="workspace">
+      <header class="workspace-header">
+        <div>
+          <h1>任务管理</h1>
+          <p>查看任务状态，进入详情，或直接创建新的自动编码任务。</p>
+        </div>
+      </header>
+
+      <section class="summary-grid">
+        <a class="metric task-filter {% if active_status == 'all' %}active{% endif %}" href="/tasks?status=all&page=1&page_size={{ pagination.page_size }}&q={{ query }}">
+          <span>全部</span>
+          <strong>{{ counts.all }}</strong>
+        </a>
+        <a class="metric task-filter {% if active_status == 'running' %}active{% endif %}" href="/tasks?status=running&page=1&page_size={{ pagination.page_size }}&q={{ query }}">
+          <span>运行中</span>
+          <strong>{{ counts.running }}</strong>
+        </a>
+        <a class="metric task-filter {% if active_status == 'done' %}active{% endif %}" href="/tasks?status=done&page=1&page_size={{ pagination.page_size }}&q={{ query }}">
+          <span>已完成</span>
+          <strong>{{ counts.done }}</strong>
+        </a>
+        <a class="metric task-filter {% if active_status == 'failed' %}active{% endif %}" href="/tasks?status=failed&page=1&page_size={{ pagination.page_size }}&q={{ query }}">
+          <span>失败</span>
+          <strong>{{ counts.failed }}</strong>
+        </a>
+      </section>
+
+      {% if active_status == "running" %}
+      <section class="alert info">
+        <strong>运行中列表会自动刷新</strong>
+        <span>点击停止会向当前 local/Docker 命令发送终止信号；如果任务还没进入命令执行阶段，则会冻结 Web Job 状态。</span>
+      </section>
+      {% endif %}
+
+      <section class="panel">
+        <div class="section-title compact">
+          <h2>任务列表</h2>
+          <button type="button" data-open-modal="task-create-modal">新建任务</button>
+        </div>
+        <form class="task-toolbar" method="get" action="/tasks">
+          <input type="hidden" name="status" value="{{ active_status }}">
+          <label>搜索
+            <input name="q" value="{{ query }}" placeholder="任务名称、Task ID、Job ID、Run ID、模板">
+          </label>
+          <label>每页
+            <select name="page_size">
+              {% for option in [5, 10, 20, 50] %}
+              <option value="{{ option }}" {% if pagination.page_size == option %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <input type="hidden" name="page" value="1">
+          <div class="toolbar-actions">
+            <button type="submit">查询</button>
+            <a class="button secondary" href="/tasks?status={{ active_status }}&page=1&page_size={{ pagination.page_size }}">清空</a>
+          </div>
+        </form>
+        <div class="task-table-wrap">
+          <table class="task-table">
+            <thead>
+              <tr>
+                <th>任务名称</th>
+                <th>Job ID</th>
+                <th>Run ID</th>
+                <th>模板</th>
+                <th>执行</th>
+                <th>更新时间</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for job in jobs %}
+              <tr>
+                <td>
+                  <strong>{{ job.task_name }}</strong>
+                  {% if job.task_id %}<span class="muted-line">{{ job.task_id }}</span>{% endif %}
+                </td>
+                <td><strong>{{ job.job_id }}</strong></td>
+                <td>{{ job.run_id or "等待 run_id" }}</td>
+                <td>
+                  {{ job.template_label }}
+                  {% if not job.template_id %}<span class="muted-line">早期任务缺少模板元数据</span>{% endif %}
+                </td>
+                <td>
+                  {{ job.execution_backend }} / {{ job.agent_mode or "agent 未记录" }}
+                  {% if job.execution_backend == "旧任务未记录" %}<span class="muted-line">早期任务缺少执行后端元数据</span>{% endif %}
+                </td>
+                <td>{{ job.updated_at or job.started_at }}</td>
+                <td><span class="status-pill {{ job.status_class }}">{{ job.status }}</span></td>
+                <td>
+                  <div class="table-actions">
+                    <a class="button secondary" href="{{ job.detail_url }}">详情</a>
+                    {% if job.can_stop %}
+                    <form method="post" action="/tasks/{{ job.job_id }}/stop?status={{ active_status }}&page={{ pagination.page }}&page_size={{ pagination.page_size }}&q={{ query }}">
+                      <button type="submit" class="secondary" data-confirm="确认停止该任务？系统会向当前 local/Docker 命令发送终止信号；若任务尚未进入命令执行阶段，则冻结 Web 状态。">停止</button>
+                    </form>
+                    {% endif %}
+                    <form method="post" action="/tasks/{{ job.job_id }}/delete?status={{ active_status }}&page={{ pagination.page }}&page_size={{ pagination.page_size }}&q={{ query }}">
+                      <button type="submit" class="danger" data-confirm="确认从任务列表移除该记录？run 目录和审计日志会保留。">删除</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="8" class="empty-cell">暂无任务记录。</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination">
+          <span>共 {{ pagination.total }} 条，第 {{ pagination.page }} / {{ pagination.total_pages }} 页</span>
+          <div class="pagination-actions">
+            {% if pagination.has_previous %}
+            <a class="button secondary" href="/tasks?status={{ active_status }}&page={{ pagination.previous_page }}&page_size={{ pagination.page_size }}&q={{ query }}">上一页</a>
+            {% else %}
+            <span class="button disabled">上一页</span>
+            {% endif %}
+            {% if pagination.has_next %}
+            <a class="button secondary" href="/tasks?status={{ active_status }}&page={{ pagination.next_page }}&page_size={{ pagination.page_size }}&q={{ query }}">下一页</a>
+            {% else %}
+            <span class="button disabled">下一页</span>
+            {% endif %}
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <div class="modal-backdrop" id="task-create-modal" hidden>
+    <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="task-create-title">
+      <div class="section-title compact">
+        <h2 id="task-create-title">新建任务</h2>
+        <button type="button" class="icon-button" data-close-modal="task-create-modal" aria-label="关闭">×</button>
+      </div>
+      <form method="post" action="/tasks/run">
+        <input type="hidden" name="template_id" value="{{ form.template_id }}">
+        <label>任务模板
+          <select name="template_id">
+            {% for template in task_templates %}
+            <option value="{{ template.id }}" {% if form.template_id == template.id %}selected{% endif %}>{{ template.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <div class="row">
+          <label>Task ID <input name="task_id" value="{{ form.task_id }}" required></label>
+          <label>类型
+            <select name="change_type">
+              {% for option in ["bugfix", "feature", "refactor", "config"] %}
+              <option value="{{ option }}" {% if form.change_type == option %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+        <label>标题 <input name="title" value="{{ form.title }}" required></label>
+        <label>描述 <textarea name="description" rows="4" required>{{ form.description }}</textarea></label>
+        <div class="row">
+          <label>Agent
+            <select name="agent_mode">
+              <option value="omx_team_patch" {% if form.agent_mode == "omx_team_patch" %}selected{% endif %}>omx_team_patch</option>
+              <option value="omx_patch" {% if form.agent_mode == "omx_patch" %}selected{% endif %}>omx_patch</option>
+              <option value="omx" {% if form.agent_mode == "omx" %}selected{% endif %}>omx</option>
+              <option value="codex" {% if form.agent_mode == "codex" %}selected{% endif %}>codex</option>
+              <option value="shell" {% if form.agent_mode == "shell" %}selected{% endif %}>shell</option>
+              <option value="mock" {% if form.agent_mode == "mock" %}selected{% endif %}>mock</option>
+            </select>
+          </label>
+          <label>Execution backend
+            <select name="execution_backend">
+              <option value="local" {% if form.execution_backend == "local" %}selected{% endif %}>local</option>
+              <option value="docker" {% if form.execution_backend == "docker" %}selected{% endif %}>docker</option>
+            </select>
+          </label>
+        </div>
+        <label>Worktree <input name="worktree_path" value="{{ form.worktree_path }}" required></label>
+        <label>Allowed paths <textarea name="allowed_paths" rows="3">{{ form.allowed_paths }}</textarea></label>
+        <div class="row">
+          <label>Docker image <input name="sandbox_image" value="{{ form.sandbox_image }}"></label>
+          <label>Docker agent 命令预设
+            <select name="command_preset">
+              {% for preset in docker_agent_command_presets %}
+              <option value="{{ preset.id }}" {% if form.command_preset == preset.id %}selected{% endif %}>{{ preset.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <label>Docker network
+            <select name="sandbox_network">
+              {% for option in ["none", "bridge"] %}
+              <option value="{{ option }}" {% if form.sandbox_network == option %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Worktree mount
+            <select name="sandbox_worktree_mount">
+              {% for option in ["readonly", "rw"] %}
+              <option value="{{ option }}" {% if form.sandbox_worktree_mount == option %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <label>Memory limit <input name="sandbox_memory_limit" value="{{ form.sandbox_memory_limit }}"></label>
+          <label>CPU limit <input name="sandbox_cpu_limit" value="{{ form.sandbox_cpu_limit }}"></label>
+        </div>
+        <label>Test command <input name="check_command" value="{{ form.check_command }}"></label>
+        <label>Patch coder / Team command <input name="patch_coder" value='{{ form.patch_coder }}'></label>
+        <label>Patch fixer <input name="patch_fixer" value='{{ form.patch_fixer }}'></label>
+        <label>Reviewer <input name="reviewer" value='{{ form.reviewer }}'></label>
+        <label class="check"><input type="checkbox" name="real_checks" {% if form.real_checks %}checked{% endif %}> 运行真实检查</label>
+        <div class="actions">
+          <button type="submit">提交任务</button>
+          <button type="button" class="secondary" data-close-modal="task-create-modal">取消</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <script>
+    document.querySelectorAll("[data-open-modal]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const modal = document.getElementById(button.dataset.openModal);
+        if (modal) {
+          modal.hidden = false;
+        }
+      });
+    });
+    document.querySelectorAll("[data-close-modal]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const modal = document.getElementById(button.dataset.closeModal);
+        if (modal) {
+          modal.hidden = true;
+        }
+      });
+    });
+    document.querySelectorAll("[data-confirm]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        if (!window.confirm(button.dataset.confirm)) {
+          event.preventDefault();
+        }
+      });
+    });
+  </script>
+</body>
+</html>
