@@ -168,7 +168,7 @@
               </div>
               {% if template.recent_job %}
               <a class="template-recent {{ template.recent_job.status_class }}" href="/jobs/{{ template.recent_job.job_id }}">
-                Recent: {{ template.recent_job.status }}{% if template.recent_job.run_id %} / {{ template.recent_job.run_id }}{% endif %}
+                Recent: {{ template.recent_job.status_label }}{% if template.recent_job.run_id %} / {{ template.recent_job.run_id }}{% endif %}
               </a>
               {% endif %}
               <form class="template-run-form" method="post" action="/templates/run">
@@ -216,7 +216,7 @@
             {% for job in jobs %}
             <a class="item" href="/jobs/{{ job.job_id }}">
               <strong>{{ job.job_id }}</strong>
-              <span>{{ job.status }} / {{ job.run_id or "等待 run_id" }}</span>
+              <span>{{ job.status_label }} / {{ job.run_id or "等待 run_id" }}</span>
             </a>
             {% else %}
             <p class="empty">暂无异步任务</p>

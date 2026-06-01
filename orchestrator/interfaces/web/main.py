@@ -730,7 +730,15 @@ def _job_was_stopped(job_id: str) -> bool:
 
 
 def _load_recent_jobs() -> list[dict[str, Any]]:
-    return [_reconcile_job(job) for job in _job_repository().list_recent(limit=20)]
+    return [_build_recent_job(job) for job in _job_repository().list_recent(limit=20)]
+
+
+def _build_recent_job(job: dict[str, Any]) -> dict[str, Any]:
+    reconciled = _reconcile_job(job)
+    status = str(reconciled.get("status") or "")
+    reconciled["status_label"] = _status_label(status)
+    reconciled["status_class"] = _status_css_class(status)
+    return reconciled
 
 
 def _load_jobs_page(*, status: str, limit: int, offset: int) -> list[dict[str, Any]]:
@@ -1219,6 +1227,7 @@ def _list_task_templates_with_recent_jobs(jobs: list[dict[str, Any]]) -> list[di
         recent_by_template[template_id] = {
             "job_id": str(job.get("job_id") or ""),
             "status": str(job.get("status") or ""),
+            "status_label": _status_label(str(job.get("status") or "")),
             "status_class": _status_css_class(str(job.get("status") or "")),
             "run_id": str(job.get("run_id") or ""),
             "updated_at": str(job.get("updated_at") or ""),

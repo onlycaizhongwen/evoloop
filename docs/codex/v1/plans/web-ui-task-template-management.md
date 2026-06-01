@@ -238,3 +238,9 @@
 
 - Task manager status pills now render Chinese labels (`运行中` / `已完成` / `失败` / `已停止`) while keeping the persisted lifecycle statuses in English for filters, CSS classes, and repository state.
 - Validation: `python -m pytest -q tests/test_web_ui.py` passed with `48 passed`; `python -m pytest -q` passed with `133 passed`.
+
+## 2026-06-01 Localized Home Job Statuses
+
+- The homepage `最近 Jobs` list and task-template `Recent` badges now reuse the same Chinese status labels as the task manager.
+- Raw lifecycle status values remain available as CSS classes and persisted job state.
+- Validation: `python -m pytest -q tests/test_web_ui.py` passed with `48 passed`; `python -m pytest -q` passed with `133 passed`.

@@ -499,7 +499,7 @@ def test_index_reconciles_halted_run_after_restart(monkeypatch, tmp_path: Path):
 
     assert response.status_code == 200
     assert "job-halted" in response.text
-    assert "failed / run-halted" in response.text
+    assert "失败 / run-halted" in response.text
     assert job is not None
     assert job["status"] == "failed"
     assert job["run_id"] == "run-halted"
@@ -522,7 +522,7 @@ def test_web_index_shows_persisted_jobs(monkeypatch, tmp_path: Path):
 
     assert response.status_code == 200
     assert "job-test" in response.text
-    assert "running" in response.text
+    assert "运行中 / 等待 run_id" in response.text
     assert 'href="/tasks"' in response.text
     assert "任务管理" in response.text
 
@@ -803,7 +803,7 @@ def test_web_index_shows_recent_job_on_template_card(monkeypatch, tmp_path: Path
 
     assert response.status_code == 200
     assert "Docker OMX Team Patch" in response.text
-    assert "Recent: done / run-template-recent" in response.text
+    assert "Recent: 已完成 / run-template-recent" in response.text
     assert 'class="template-recent done"' in response.text
     assert 'href="/jobs/job-template-recent"' in response.text
 
