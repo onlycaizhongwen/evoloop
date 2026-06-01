@@ -532,6 +532,7 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     (tmp_path / "examples").mkdir()
     running_task = tmp_path / ".omx" / "web-tasks" / "task-running-template.json"
     done_task = tmp_path / ".omx" / "web-tasks" / "task-done-template.json"
+    failed_task = tmp_path / ".omx" / "web-tasks" / "task-failed-template.json"
     running_task.parent.mkdir(parents=True)
     running_task.write_text(
         json.dumps(
@@ -543,6 +544,13 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     done_task.write_text(
         json.dumps(
             {"task_id": "task-done-template", "title": "已完成模板任务", "template_id": "docker_patch_json"},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    failed_task.write_text(
+        json.dumps(
+            {"task_id": "task-failed-template", "title": "失败模板任务", "template_id": "docker_team_patch"},
             ensure_ascii=False,
         ),
         encoding="utf-8",
@@ -566,6 +574,15 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
             "run_id": "run-done-template",
         }
     )
+    repository.create(
+        {
+            "job_id": "job-failed-template",
+            "status": "failed",
+            "message": "failed",
+            "task_path": str(failed_task),
+            "run_id": "run-failed-template",
+        }
+    )
 
     response = TestClient(app).get("/tasks")
 
@@ -576,6 +593,7 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert "已停止" in response.text
     assert "job-running-template" in response.text
     assert "job-done-template" in response.text
+    assert "job-failed-template" in response.text
     assert "Docker OMX Team Patch" in response.text
     assert "Docker Patch JSON" in response.text
     assert "<table" in response.text
@@ -590,6 +608,8 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert "已完成模板任务" in response.text
     assert 'href="/jobs/job-running-template"' in response.text
     assert 'href="/runs/run-done-template"' in response.text
+    assert 'href="/jobs/job-failed-template"' in response.text
+    assert 'href="/runs/run-failed-template">运行详情</a>' in response.text
     assert 'action="/tasks/job-running-template/stop?status=all&amp;page=1&amp;page_size=10&amp;q="' in response.text
     assert 'action="/jobs/job-running-template/rerun"' not in response.text
     assert 'action="/jobs/job-done-template/rerun"' in response.text
@@ -599,7 +619,7 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert "删除" in response.text
     assert 'data-confirm="确认停止该任务？系统会向当前 local/Docker 命令发送终止信号；若任务尚未进入命令执行阶段，则冻结 Web 状态。"' in response.text
     assert 'data-confirm="确认从任务列表移除该记录？run 目录和审计日志会保留。"' in response.text
-    assert "共 2 条，第 1 / 1 页" in response.text
+    assert "共 3 条，第 1 / 1 页" in response.text
     assert 'class="sidebar"' in response.text
     assert '<nav class="side-nav">\n        <a class="active" href="/tasks">任务管理</a>\n      </nav>' in response.text
     assert 'data-open-modal="task-create-modal"' in response.text

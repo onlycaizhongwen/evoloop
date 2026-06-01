@@ -116,6 +116,12 @@
 - Warning alerts now have a distinct yellow treatment so recoverable operator attention states are visually separate from danger and info states.
 - Validation: `python -m pytest -q tests/test_web_ui.py` passed with `48 passed`.
 
+## 2026-06-01 Task Row Run Detail Link
+
+- Task manager rows now expose `运行详情` whenever a job has a `run_id` and the primary detail link still points to the Job status page.
+- This gives failed or stopped jobs a direct path to run audit artifacts without hiding the Job-level failure/stop context.
+- Validation: `python -m pytest -q tests/test_web_ui.py` passed with `48 passed`.
+
 ## 2026-05-27 Task Management Navigation
 
 - Web UI now has a top navigation menu with `新建任务` and `任务管理`.

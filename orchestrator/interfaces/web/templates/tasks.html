@@ -121,6 +121,9 @@
                 <td>
                   <div class="table-actions">
                     <a class="button secondary" href="{{ job.detail_url }}">详情</a>
+                    {% if job.run_detail_url and job.run_detail_url != job.detail_url %}
+                    <a class="button secondary" href="{{ job.run_detail_url }}">运行详情</a>
+                    {% endif %}
                     {% if job.can_stop %}
                     <form method="post" action="/tasks/{{ job.job_id }}/stop?{{ task_query }}">
                       <button type="submit" class="secondary" data-confirm="确认停止该任务？系统会向当前 local/Docker 命令发送终止信号；若任务尚未进入命令执行阶段，则冻结 Web 状态。">停止</button>
