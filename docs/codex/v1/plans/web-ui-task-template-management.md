@@ -98,6 +98,12 @@
 - Job status pages now auto-refresh only while the job is still `running`; stopped jobs stay stable for reading the stop message and follow-up actions.
 - Validation: `python -m pytest -q tests/test_web_ui.py` passed with `47 passed`.
 
+## 2026-06-01 Task Row Rerun Action
+
+- Task manager rows now expose `重新运行` directly for non-running jobs, reusing the existing `/jobs/{job_id}/rerun` route.
+- Running jobs intentionally hide row-level rerun to avoid accidentally starting duplicate work while the original job is active.
+- Validation: `python -m pytest -q tests/test_web_ui.py` passed with `47 passed`.
+
 ## 2026-05-27 Task Management Navigation
 
 - Web UI now has a top navigation menu with `新建任务` and `任务管理`.

@@ -126,6 +126,11 @@
                       <button type="submit" class="secondary" data-confirm="确认停止该任务？系统会向当前 local/Docker 命令发送终止信号；若任务尚未进入命令执行阶段，则冻结 Web 状态。">停止</button>
                     </form>
                     {% endif %}
+                    {% if job.can_rerun %}
+                    <form method="post" action="/jobs/{{ job.job_id }}/rerun">
+                      <button type="submit" class="secondary">重新运行</button>
+                    </form>
+                    {% endif %}
                     <form method="post" action="/tasks/{{ job.job_id }}/delete?{{ task_query }}">
                       <button type="submit" class="danger" data-confirm="确认从任务列表移除该记录？run 目录和审计日志会保留。">删除</button>
                     </form>

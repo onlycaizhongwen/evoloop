@@ -800,6 +800,7 @@ def _build_task_manager_job(job: dict[str, Any]) -> dict[str, str]:
         "agent_mode": task_context.get("agent_mode") or "",
         "detail_url": f"/runs/{run_id}" if status == "done" and run_id else f"/jobs/{job_id}",
         "can_stop": "1" if status == "running" else "",
+        "can_rerun": "1" if status != "running" else "",
     }
 
 

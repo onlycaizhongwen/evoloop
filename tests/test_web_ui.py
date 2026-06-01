@@ -563,8 +563,11 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert 'href="/jobs/job-running-template"' in response.text
     assert 'href="/runs/run-done-template"' in response.text
     assert 'action="/tasks/job-running-template/stop?status=all&amp;page=1&amp;page_size=10&amp;q="' in response.text
+    assert 'action="/jobs/job-running-template/rerun"' not in response.text
+    assert 'action="/jobs/job-done-template/rerun"' in response.text
     assert 'action="/tasks/job-running-template/delete?status=all&amp;page=1&amp;page_size=10&amp;q="' in response.text
     assert "停止" in response.text
+    assert "重新运行" in response.text
     assert "删除" in response.text
     assert 'data-confirm="确认停止该任务？系统会向当前 local/Docker 命令发送终止信号；若任务尚未进入命令执行阶段，则冻结 Web 状态。"' in response.text
     assert 'data-confirm="确认从任务列表移除该记录？run 目录和审计日志会保留。"' in response.text
