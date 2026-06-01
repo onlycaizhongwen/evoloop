@@ -22,12 +22,14 @@ def test_web_index_renders(monkeypatch, tmp_path: Path):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "examples").mkdir()
     (tmp_path / "examples" / "task.mock.json").write_text("{}", encoding="utf-8")
+    _write_run_state(tmp_path, "run-index", "task-index", RunStatus.DONE, "done")
 
     response = TestClient(app).get("/")
 
     assert response.status_code == 200
     assert "Auto Evolution Orchestrator" in response.text
     assert "task.mock.json" in response.text
+    assert "task-index / 已完成 / done" in response.text
 
 
 def test_job_status_reads_persisted_job(monkeypatch, tmp_path: Path):

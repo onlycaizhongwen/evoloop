@@ -1264,7 +1264,9 @@ def _status_label(status: str) -> str:
     return {
         "done": "已完成",
         "failed": "失败",
+        "halted": "已暂停",
         "running": "运行中",
+        "retrying": "重试中",
         "stopped": "已停止",
     }.get(normalized, status or "未知")
 
@@ -1286,6 +1288,7 @@ def _load_runs() -> list[dict[str, object]]:
                 "run_id": state.run_id,
                 "task_id": state.task_id,
                 "status": state.status,
+                "status_label": _status_label(str(state.status)),
                 "phase": state.current_phase,
             }
         )

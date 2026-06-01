@@ -244,3 +244,9 @@
 - The homepage `最近 Jobs` list and task-template `Recent` badges now reuse the same Chinese status labels as the task manager.
 - Raw lifecycle status values remain available as CSS classes and persisted job state.
 - Validation: `python -m pytest -q tests/test_web_ui.py` passed with `48 passed`; `python -m pytest -q` passed with `133 passed`.
+
+## 2026-06-01 Localized Home Run Statuses
+
+- The homepage `最近 Runs` list now renders run lifecycle statuses with Chinese labels while preserving the underlying `RunStatus` values.
+- The shared status label helper now covers `halted` and `retrying` in addition to Web job statuses.
+- Validation: `python -m pytest -q tests/test_web_ui.py` passed with `48 passed`; `python -m pytest -q` passed with `133 passed`.

@@ -230,7 +230,7 @@
             {% for run in runs %}
             <a class="item" href="/runs/{{ run.run_id }}">
               <strong>{{ run.run_id }}</strong>
-              <span>{{ run.task_id }} / {{ run.status }} / {{ run.phase }}</span>
+              <span>{{ run.task_id }} / {{ run.status_label }} / {{ run.phase }}</span>
             </a>
             {% else %}
             <p class="empty">暂无运行记录</p>
