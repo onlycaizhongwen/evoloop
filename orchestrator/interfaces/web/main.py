@@ -249,6 +249,7 @@ def job_status(request: Request, job_id: str, reused: str = ""):
     progress = _load_job_progress(run_id) if run_id else None
     task_context = _load_job_task_context(job, run_id)
     failure_hint = _build_job_failure_hint(job, progress)
+    docker_evidence = _load_docker_evidence(RUNS_DIR / run_id) if run_id else _empty_docker_evidence()
     return TEMPLATES.TemplateResponse(
         request,
         "job_status.html",
@@ -260,6 +261,14 @@ def job_status(request: Request, job_id: str, reused: str = ""):
             "task_context": task_context,
             "task_meta": _build_job_task_meta(job, task_context),
             "failure_hint": failure_hint,
+            "execution_chain": _build_execution_chain(
+                task_context,
+                status=str(job.get("status") or ""),
+                phase=(progress or {}).get("phase") or str(job.get("status") or "创建中"),
+                run_id=run_id,
+                docker_evidence=docker_evidence,
+                patches=[],
+            ),
             "reused_existing_job": reused == "1",
         },
     )
@@ -347,6 +356,15 @@ def run_detail(request: Request, run_id: str):
             "run_dir": run_dir,
             "summary": _build_run_summary(state, patches),
             "execution_summary": _build_execution_summary(state, patches, docker_evidence, phase_timeline),
+            "execution_chain": _build_execution_chain(
+                task_context,
+                status=str(state.status),
+                phase=str(state.current_phase),
+                run_id=run_id,
+                docker_evidence=docker_evidence,
+                patches=patches,
+            ),
+            "run_artifacts": _build_run_artifacts(run_dir, task_context, patches),
             "task_context": task_context,
             "task_meta": _build_run_task_meta(state, task_context),
             "failure_hint": _build_run_failure_hint(state, final_report, phase_log),
@@ -824,6 +842,133 @@ def _build_run_failure_hint(state: RunState, final_report: str, phase_log: str) 
     }
 
 
+def _build_execution_chain(
+    task_context: dict[str, str],
+    *,
+    status: str,
+    phase: str,
+    run_id: str,
+    docker_evidence: dict[str, object],
+    patches: list[dict[str, object]],
+) -> dict[str, object]:
+    backend = task_context.get("execution_backend") or "未记录"
+    agent_mode = task_context.get("agent_mode") or "未记录"
+    preset = task_context.get("command_preset") or "custom/未记录"
+    patch_coder = task_context.get("patch_coder") or "未记录"
+    has_patches = bool(patches)
+    pending_patches = sum(1 for patch in patches if patch.get("status") == "pending")
+    applied_patches = sum(1 for patch in patches if patch.get("status") == "applied")
+    docker_enabled = bool(docker_evidence.get("enabled")) or backend == "docker"
+    agent_label = _agent_chain_label(agent_mode)
+    return {
+        "headline": f"{backend} / {agent_mode}",
+        "agent_label": agent_label,
+        "backend_label": "Docker sandbox" if docker_enabled else "本地执行",
+        "command_preset": preset,
+        "patch_coder": patch_coder,
+        "run_label": run_id or "创建中",
+        "phase": phase or "未记录",
+        "quality_label": _quality_gate_label(status, phase),
+        "patch_label": _patch_chain_label(has_patches, pending_patches, applied_patches),
+        "docker_label": _docker_chain_label(docker_evidence, backend),
+        "nodes": [
+            {
+                "title": "Web UI",
+                "status": "已提交",
+                "detail": task_context.get("task_id") or "任务 ID 未记录",
+                "tone": "success",
+            },
+            {
+                "title": "Orchestrator",
+                "status": phase or status or "等待 run",
+                "detail": f"Run：{run_id or '创建中'}",
+                "tone": _chain_tone(status, phase),
+            },
+            {
+                "title": "Agent",
+                "status": agent_label,
+                "detail": f"Preset：{preset}",
+                "tone": "info" if agent_mode != "未记录" else "warning",
+            },
+            {
+                "title": "执行环境",
+                "status": "Docker sandbox" if docker_enabled else "Local",
+                "detail": _docker_chain_label(docker_evidence, backend),
+                "tone": "success" if docker_evidence.get("enabled") else "info",
+            },
+            {
+                "title": "Patch",
+                "status": _patch_chain_label(has_patches, pending_patches, applied_patches),
+                "detail": "补丁审批区记录实际变更" if has_patches else "暂无补丁记录",
+                "tone": "warning" if pending_patches else ("success" if has_patches else "info"),
+            },
+            {
+                "title": "Quality Gate",
+                "status": _quality_gate_label(status, phase),
+                "detail": "Hard check / review / gate",
+                "tone": _chain_tone(status, phase),
+            },
+        ],
+    }
+
+
+def _agent_chain_label(agent_mode: str) -> str:
+    if agent_mode == "codex":
+        return "Codex 直接执行"
+    if agent_mode == "omx":
+        return "OMX 入口"
+    if agent_mode == "omx_patch":
+        return "OMX Patch Agent"
+    if agent_mode == "omx_team_patch":
+        return "OMX Team 编排"
+    if agent_mode == "shell":
+        return "Shell Agent"
+    if agent_mode == "mock":
+        return "Mock Agent"
+    return "Agent 未记录"
+
+
+def _docker_chain_label(docker_evidence: dict[str, object], backend: str) -> str:
+    if docker_evidence.get("enabled"):
+        count = docker_evidence.get("count") or 0
+        image = docker_evidence.get("image") or "镜像未记录"
+        return f"已记录 {count} 次 Docker 执行 / {image}"
+    if backend == "docker":
+        return "计划使用 Docker，等待执行证据"
+    return "未使用 Docker sandbox"
+
+
+def _patch_chain_label(has_patches: bool, pending_count: int, applied_count: int) -> str:
+    if pending_count:
+        return f"待审批 {pending_count} 个"
+    if applied_count:
+        return f"已批准 {applied_count} 个"
+    if has_patches:
+        return "已有补丁记录"
+    return "暂无补丁"
+
+
+def _quality_gate_label(status: str, phase: str) -> str:
+    if status == "done":
+        return "已通过"
+    if status in {"failed", "halted"}:
+        return "未通过"
+    if status == "stopped":
+        return "已停止"
+    return phase or "运行中"
+
+
+def _chain_tone(status: str, phase: str) -> str:
+    text = f"{status} {phase}".lower()
+    if any(keyword in text for keyword in ("done", "passed", "success")):
+        return "success"
+    if any(keyword in text for keyword in ("failed", "halted", "error")):
+        return "danger"
+    if "stopped" in text or "pending" in text or "approval" in text:
+        return "warning"
+    return "info"
+
+
 def _build_execution_summary(
     state: RunState,
     patches: list[dict[str, object]],
@@ -846,6 +991,76 @@ def _build_execution_summary(
         "last_event": str(last_event.get("summary") or "暂无阶段事件"),
         "updated_at": state.updated_at.isoformat(),
     }
+
+
+def _build_run_artifacts(run_dir: Path, task_context: dict[str, str], patches: list[dict[str, object]]) -> dict[str, object]:
+    files = {
+        "task": run_dir / "task.json",
+        "state": run_dir / "run_state.json",
+        "final_report": run_dir / "final_report.md",
+        "phase_log": run_dir / "logs" / "phase.log",
+        "heartbeat_log": run_dir / "logs" / "heartbeat.log",
+        "agent_log": run_dir / "logs" / "agent.log",
+        "docker_log": run_dir / "logs" / "docker_sandbox.jsonl",
+    }
+    artifact_rows = [
+        _artifact_row("任务文件", files["task"]),
+        _artifact_row("运行状态", files["state"]),
+        _artifact_row("最终报告", files["final_report"]),
+        _artifact_row("阶段日志", files["phase_log"]),
+        _artifact_row("心跳日志", files["heartbeat_log"]),
+        _artifact_row("Agent 日志", files["agent_log"]),
+        _artifact_row("Docker 日志", files["docker_log"]),
+    ]
+    changed_files = _changed_files_from_patches(patches)
+    return {
+        "run_dir": run_dir.as_posix(),
+        "worktree": task_context.get("worktree_path") or "未记录",
+        "rows": artifact_rows,
+        "patch_count": str(len(patches)),
+        "patch_rows": [_patch_artifact_row(patch) for patch in patches],
+        "changed_files": changed_files,
+        "changed_files_label": ", ".join(changed_files) if changed_files else "暂无变更文件记录",
+    }
+
+
+def _artifact_row(label: str, path: Path) -> dict[str, str]:
+    exists = path.exists()
+    return {
+        "label": label,
+        "path": path.as_posix(),
+        "status": "已生成" if exists else "暂无记录",
+        "size": _format_file_size(path.stat().st_size) if exists and path.is_file() else "",
+    }
+
+
+def _patch_artifact_row(patch: dict[str, object]) -> dict[str, str]:
+    return {
+        "name": str(patch.get("patch") or "未记录"),
+        "status": str(patch.get("status") or "未记录"),
+        "risk_score": str(patch.get("risk_score") or "未记录"),
+        "files": str(patch.get("files") or "暂无变更文件记录"),
+    }
+
+
+def _changed_files_from_patches(patches: list[dict[str, object]]) -> list[str]:
+    changed: list[str] = []
+    seen: set[str] = set()
+    for patch in patches:
+        files = str(patch.get("files") or "")
+        for file in (item.strip() for item in files.split(",") if item.strip()):
+            if file not in seen:
+                seen.add(file)
+                changed.append(file)
+    return changed
+
+
+def _format_file_size(size: int) -> str:
+    if size < 1024:
+        return f"{size} B"
+    if size < 1024 * 1024:
+        return f"{size / 1024:.1f} KB"
+    return f"{size / 1024 / 1024:.1f} MB"
 
 
 def _parse_phase_timeline(phase_log: str) -> list[dict[str, str]]:
@@ -1115,23 +1330,7 @@ def _load_job_progress(run_id: str | None) -> dict[str, str] | None:
 
 def _load_docker_evidence(run_dir: Path) -> dict[str, object]:
     log_path = run_dir / "logs" / "docker_sandbox.jsonl"
-    evidence: dict[str, object] = {
-        "enabled": False,
-        "count": 0,
-        "image": "",
-        "network": "",
-        "worktree_mount": "",
-        "worktree_container_path": "",
-        "phase": "",
-        "command": "",
-        "exit_code": "",
-        "duration_seconds": "",
-        "timed_out": "",
-        "last_log": "",
-        "phases": "",
-        "recent_logs": [],
-        "log_path": log_path.as_posix(),
-    }
+    evidence = _empty_docker_evidence(log_path)
     if not log_path.exists():
         return evidence
 
@@ -1168,6 +1367,26 @@ def _load_docker_evidence(run_dir: Path) -> dict[str, object]:
         }
     )
     return evidence
+
+
+def _empty_docker_evidence(log_path: Path | None = None) -> dict[str, object]:
+    return {
+        "enabled": False,
+        "count": 0,
+        "image": "",
+        "network": "",
+        "worktree_mount": "",
+        "worktree_container_path": "",
+        "phase": "",
+        "command": "",
+        "exit_code": "",
+        "duration_seconds": "",
+        "timed_out": "",
+        "last_log": "",
+        "phases": "",
+        "recent_logs": [],
+        "log_path": log_path.as_posix() if log_path else "",
+    }
 
 
 def _load_task_context(run_dir: Path) -> dict[str, str]:

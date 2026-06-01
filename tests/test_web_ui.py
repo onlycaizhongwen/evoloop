@@ -11,7 +11,9 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from orchestrator.domain.enums import RunStatus
+from orchestrator.domain.models.patch_plan import PatchApplyResult, PatchPlan
 from orchestrator.domain.models.run_state import RunState
+from orchestrator.infrastructure.patches.patch_approval import PendingPatchWriter
 from orchestrator.infrastructure.persistence.sqlite_job_repository import SQLiteJobRepository
 from orchestrator.interfaces.web.main import app
 
@@ -66,6 +68,11 @@ def test_job_status_reads_persisted_job(monkeypatch, tmp_path: Path):
     assert "task-job-context / job-test" in response.text
     assert "running" in response.text
     assert "启动配置" in response.text
+    assert "执行链路" in response.text
+    assert "当前任务由 docker / omx_patch 执行" in response.text
+    assert "OMX Patch Agent" in response.text
+    assert "Docker sandbox" in response.text
+    assert "计划使用 Docker，等待执行证据" in response.text
     assert "Docker Patch JSON" in response.text
     assert "docker_patch_json" in response.text
     assert "patch_json_backend" in response.text
@@ -313,6 +320,22 @@ def test_run_detail_shows_task_template_context(monkeypatch, tmp_path: Path):
         ),
         encoding="utf-8",
     )
+    (run_dir / "final_report.md").write_text("done", encoding="utf-8")
+    (run_dir / "logs" / "phase.log").write_text("phase=done event=end\n", encoding="utf-8")
+    patch_plan = PatchPlan(
+        task_id="task-template-context",
+        summary="fix calculator",
+        operations=[{"op": "replace_text", "path": "calculator.py", "old": "return a - b", "new": "return a + b"}],
+    )
+    patch_result = PatchApplyResult(changed_files=["calculator.py"], risk_score=8)
+    state = RunState(
+        run_id="run-template-context",
+        task_id="task-template-context",
+        attempt=1,
+        max_attempts=1,
+        artifacts={"run_dir": str(run_dir)},
+    )
+    PendingPatchWriter().write(state, "patch_coder", patch_plan, patch_result)
 
     response = TestClient(app).get("/runs/run-template-context")
 
@@ -321,6 +344,18 @@ def test_run_detail_shows_task_template_context(monkeypatch, tmp_path: Path):
     assert "task-template-context / run-template-context" in response.text
     assert "docker / omx_team_patch" in response.text
     assert "启动配置" in response.text
+    assert "执行链路" in response.text
+    assert "本次运行由 docker / omx_team_patch 执行" in response.text
+    assert "OMX Team 编排" in response.text
+    assert "Docker sandbox" in response.text
+    assert "python /worktree/docker_team_backend.py" in response.text
+    assert "运行产物" in response.text
+    assert ".omx/runs/run-template-context" in response.text
+    assert "final_report.md" in response.text
+    assert "phase.log" in response.text
+    assert "001-patch_coder.json" in response.text
+    assert "calculator.py" in response.text
+    assert "已生成" in response.text
     assert "Docker OMX Team Patch" in response.text
     assert "docker_team_patch" in response.text
     assert "team_patch_backend" in response.text

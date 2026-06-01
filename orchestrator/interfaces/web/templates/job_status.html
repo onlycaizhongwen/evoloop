@@ -70,6 +70,33 @@
 
     <section class="panel">
       <div class="section-title compact">
+        <div>
+          <p class="eyebrow">执行链路</p>
+          <h2>当前任务由 {{ execution_chain.headline }} 执行</h2>
+        </div>
+      </div>
+      <div class="chain-flow">
+        {% for node in execution_chain.nodes %}
+        <div class="chain-node {{ node.tone }}">
+          <span>{{ node.title }}</span>
+          <strong>{{ node.status }}</strong>
+          <p>{{ node.detail }}</p>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="evidence-grid chain-meta">
+        <div><span>Agent 路径</span><strong>{{ execution_chain.agent_label }}</strong></div>
+        <div><span>执行环境</span><strong>{{ execution_chain.backend_label }}</strong></div>
+        <div><span>命令预设</span><strong>{{ execution_chain.command_preset }}</strong></div>
+        <div><span>Patch 状态</span><strong>{{ execution_chain.patch_label }}</strong></div>
+        <div><span>Docker 证据</span><strong>{{ execution_chain.docker_label }}</strong></div>
+        <div><span>Quality Gate</span><strong>{{ execution_chain.quality_label }}</strong></div>
+      </div>
+      <p class="empty">执行命令：{{ execution_chain.patch_coder }}</p>
+    </section>
+
+    <section class="panel">
+      <div class="section-title compact">
         <h2>任务操作</h2>
         <div class="actions">
           {% if job.status == "running" %}

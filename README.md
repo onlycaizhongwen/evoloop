@@ -11,7 +11,8 @@ Evoloop 是一个自动循环进化编码智能体系统原型。它把任务提
 - OMX/Codex 执行适配：支持 `mock`、`shell`、`codex`、`omx`、`omx_patch`、`omx_team_patch` agent mode。
 - Docker 沙箱：Docker 后端使用安全的 `/worktree`、`/run`、`/cache` 路径约束，运行证据写入 run 日志。
 - 补丁审批：agent 产出的 patch JSON/team result 会进入 pending patch 流程，支持 Web 审批、拒绝、审批后重新验证。
-- 运行详情：Run 详情页展示任务元数据、失败原因、执行摘要、阶段时间线、Docker 证据、最终报告和诊断日志。
+- 执行链路：Job 和 Run 页面展示 Web UI、Orchestrator、Agent、执行环境、Patch、Quality Gate 的链路摘要。
+- 运行详情：Run 详情页展示任务元数据、失败原因、执行摘要、阶段时间线、执行链路、运行产物、Docker 证据、最终报告和诊断日志。
 - 任务控制：Web 启动的 local/Docker 命令会注册到取消表，停止任务时会尝试终止底层进程。
 
 ## 项目结构
@@ -53,7 +54,7 @@ http://127.0.0.1:8765/tasks?page=1&page_size=10
 - `Local OMX Team Patch`：本地 OMX team result 风格任务。
 - `Mock Flow Demo`：不调用真实外部 agent，用于验证 Orchestrator 状态流转。
 
-提交后先进入 Job 状态页。任务完成后可进入 Run 详情页查看最终报告、补丁审批、阶段时间线和 Docker 执行证据。
+提交后先进入 Job 状态页。页面会展示执行链路，说明任务当前由哪个 agent mode、哪个 backend 和哪个命令预设执行。任务完成后可进入 Run 详情页查看最终报告、补丁审批、运行产物、阶段时间线和 Docker 执行证据。
 
 ## CLI 使用
 
@@ -149,7 +150,7 @@ python -m pytest -q
 3. 点击“新建任务”。
 4. 优先选择 `Docker OMX Team Patch` 模板。
 5. 提交任务，等待 Job 状态变化。
-6. 进入 Run 详情查看执行摘要、阶段时间线、失败原因或最终报告。
+6. 进入 Run 详情查看执行摘要、运行产物、阶段时间线、失败原因或最终报告。
 7. 如果生成待审批补丁，检查补丁预览后选择批准并验证或拒绝。
 
 ## 当前边界

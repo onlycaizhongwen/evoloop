@@ -168,3 +168,17 @@
 - `logs/phase.log` is parsed into a tolerant `阶段时间线` list. It supports structured `key=value` phase logger lines and simpler legacy lines used by older tests/runs.
 - Docker sandbox evidence is loaded once per run detail request and reused by both the summary panel and diagnostics section.
 - Validation: `python -m pytest -q tests/test_web_ui.py` passed with `45 passed`; `python -m pytest -q` passed with `130 passed`.
+
+## 2026-05-29 Execution Chain Summary
+
+- Job status and Run detail pages now include an `执行链路` panel showing the path from Web UI to Orchestrator, Agent, execution environment, Patch, and Quality Gate.
+- The chain distinguishes `codex`, `omx`, `omx_patch`, `omx_team_patch`, `shell`, and `mock` agent modes without claiming Codex was called unless the selected mode implies it.
+- Docker chain copy now separates planned Docker backend from recorded Docker sandbox evidence, so users can see whether the run is still waiting for evidence or has concrete Docker logs.
+- Validation: `python -m pytest -q tests/test_web_ui.py` passed with `45 passed`; `python -m pytest -q tests/test_command_safety_and_heartbeat.py tests/test_web_ui.py` passed with `57 passed`; `python -m pytest -q` passed with `130 passed`.
+
+## 2026-05-30 Run Artifact Entry Points
+
+- Run detail pages now include a `运行产物` panel with the run directory, worktree, patch count, changed-file summary, and status rows for task, run_state, final_report, phase log, heartbeat log, agent log, and Docker log files.
+- Patch artifacts are summarized in the same panel with patch file name, status, risk score, and changed files, so users can locate generated patch JSON without manually browsing `.omx/runs`.
+- Missing files render as `暂无记录` instead of failing the page, preserving compatibility with legacy or partially-created runs.
+- Validation: `python -m pytest -q tests/test_web_ui.py` passed with `45 passed`.
