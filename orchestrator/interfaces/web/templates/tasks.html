@@ -28,19 +28,19 @@
       </header>
 
       <section class="summary-grid">
-        <a class="metric task-filter {% if active_status == 'all' %}active{% endif %}" href="/tasks?status=all&page=1&page_size={{ pagination.page_size }}&q={{ query }}">
+        <a class="metric task-filter {% if active_status == 'all' %}active{% endif %}" href="/tasks?status=all&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
           <span>全部</span>
           <strong>{{ counts.all }}</strong>
         </a>
-        <a class="metric task-filter {% if active_status == 'running' %}active{% endif %}" href="/tasks?status=running&page=1&page_size={{ pagination.page_size }}&q={{ query }}">
+        <a class="metric task-filter {% if active_status == 'running' %}active{% endif %}" href="/tasks?status=running&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
           <span>运行中</span>
           <strong>{{ counts.running }}</strong>
         </a>
-        <a class="metric task-filter {% if active_status == 'done' %}active{% endif %}" href="/tasks?status=done&page=1&page_size={{ pagination.page_size }}&q={{ query }}">
+        <a class="metric task-filter {% if active_status == 'done' %}active{% endif %}" href="/tasks?status=done&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
           <span>已完成</span>
           <strong>{{ counts.done }}</strong>
         </a>
-        <a class="metric task-filter {% if active_status == 'failed' %}active{% endif %}" href="/tasks?status=failed&page=1&page_size={{ pagination.page_size }}&q={{ query }}">
+        <a class="metric task-filter {% if active_status == 'failed' %}active{% endif %}" href="/tasks?status=failed&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
           <span>失败</span>
           <strong>{{ counts.failed }}</strong>
         </a>
@@ -113,11 +113,11 @@
                   <div class="table-actions">
                     <a class="button secondary" href="{{ job.detail_url }}">详情</a>
                     {% if job.can_stop %}
-                    <form method="post" action="/tasks/{{ job.job_id }}/stop?status={{ active_status }}&page={{ pagination.page }}&page_size={{ pagination.page_size }}&q={{ query }}">
+                    <form method="post" action="/tasks/{{ job.job_id }}/stop?{{ task_query }}">
                       <button type="submit" class="secondary" data-confirm="确认停止该任务？系统会向当前 local/Docker 命令发送终止信号；若任务尚未进入命令执行阶段，则冻结 Web 状态。">停止</button>
                     </form>
                     {% endif %}
-                    <form method="post" action="/tasks/{{ job.job_id }}/delete?status={{ active_status }}&page={{ pagination.page }}&page_size={{ pagination.page_size }}&q={{ query }}">
+                    <form method="post" action="/tasks/{{ job.job_id }}/delete?{{ task_query }}">
                       <button type="submit" class="danger" data-confirm="确认从任务列表移除该记录？run 目录和审计日志会保留。">删除</button>
                     </form>
                   </div>
@@ -135,12 +135,12 @@
           <span>共 {{ pagination.total }} 条，第 {{ pagination.page }} / {{ pagination.total_pages }} 页</span>
           <div class="pagination-actions">
             {% if pagination.has_previous %}
-            <a class="button secondary" href="/tasks?status={{ active_status }}&page={{ pagination.previous_page }}&page_size={{ pagination.page_size }}&q={{ query }}">上一页</a>
+            <a class="button secondary" href="/tasks?{{ pagination.previous_query }}">上一页</a>
             {% else %}
             <span class="button disabled">上一页</span>
             {% endif %}
             {% if pagination.has_next %}
-            <a class="button secondary" href="/tasks?status={{ active_status }}&page={{ pagination.next_page }}&page_size={{ pagination.page_size }}&q={{ query }}">下一页</a>
+            <a class="button secondary" href="/tasks?{{ pagination.next_query }}">下一页</a>
             {% else %}
             <span class="button disabled">下一页</span>
             {% endif %}

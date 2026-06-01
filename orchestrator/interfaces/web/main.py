@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Iterable
-from urllib.parse import unquote
+from urllib.parse import urlencode, unquote
 
 import uvicorn
 from fastapi import FastAPI, Form, Request
@@ -292,6 +292,8 @@ def task_manager(request: Request, status: str = "all", page: int = 1, page_size
             "jobs": enriched_jobs,
             "active_status": normalized_status,
             "query": query,
+            "task_query": _tasks_query(status=normalized_status, page=current_page, page_size=normalized_page_size, q=query),
+            "task_query_first_page": _tasks_query(status=normalized_status, page=1, page_size=normalized_page_size, q=query),
             "counts": _count_jobs_by_status(),
             "pagination": {
                 "page": current_page,
@@ -302,6 +304,18 @@ def task_manager(request: Request, status: str = "all", page: int = 1, page_size
                 "has_next": current_page < total_pages,
                 "previous_page": max(1, current_page - 1),
                 "next_page": min(total_pages, current_page + 1),
+                "previous_query": _tasks_query(
+                    status=normalized_status,
+                    page=max(1, current_page - 1),
+                    page_size=normalized_page_size,
+                    q=query,
+                ),
+                "next_query": _tasks_query(
+                    status=normalized_status,
+                    page=min(total_pages, current_page + 1),
+                    page_size=normalized_page_size,
+                    q=query,
+                ),
             },
             "form": _default_task_form(),
             "docker_agent_command_presets": list_command_presets(),
@@ -312,7 +326,7 @@ def task_manager(request: Request, status: str = "all", page: int = 1, page_size
 
 
 @app.post("/tasks/{job_id}/stop")
-def stop_task(job_id: str, status: str = "all", page: int = 1, page_size: int = 10):
+def stop_task(job_id: str, status: str = "all", page: int = 1, page_size: int = 10, q: str = ""):
     safe_job_id = _safe_id(job_id)
     job = _read_job(safe_job_id)
     if job and str(job.get("status") or "") == "running":
@@ -327,13 +341,13 @@ def stop_task(job_id: str, status: str = "all", page: int = 1, page_size: int = 
             ),
             finished_at=datetime.now().isoformat(),
         )
-    return RedirectResponse(url=_tasks_url(status=status, page=page, page_size=page_size), status_code=303)
+    return RedirectResponse(url=_tasks_url(status=status, page=page, page_size=page_size, q=q), status_code=303)
 
 
 @app.post("/tasks/{job_id}/delete")
-def delete_task(job_id: str, status: str = "all", page: int = 1, page_size: int = 10):
+def delete_task(job_id: str, status: str = "all", page: int = 1, page_size: int = 10, q: str = ""):
     _job_repository().delete(_safe_id(job_id))
-    return RedirectResponse(url=_tasks_url(status=status, page=page, page_size=page_size), status_code=303)
+    return RedirectResponse(url=_tasks_url(status=status, page=page, page_size=page_size, q=q), status_code=303)
 
 
 @app.get("/runs/{run_id}", response_class=HTMLResponse)
@@ -1162,11 +1176,22 @@ def _count_jobs_by_status() -> dict[str, int]:
     return _job_repository().counts_by_status()
 
 
-def _tasks_url(*, status: str, page: int, page_size: int) -> str:
+def _tasks_query(*, status: str, page: int, page_size: int, q: str = "") -> str:
     normalized_status = status if status in {"all", "running", "done", "failed", "stopped"} else "all"
     normalized_page = max(page, 1)
     normalized_page_size = min(max(page_size, 5), 50)
-    return f"/tasks?status={normalized_status}&page={normalized_page}&page_size={normalized_page_size}"
+    return urlencode(
+        {
+            "status": normalized_status,
+            "page": normalized_page,
+            "page_size": normalized_page_size,
+            "q": q.strip(),
+        }
+    )
+
+
+def _tasks_url(*, status: str, page: int, page_size: int, q: str = "") -> str:
+    return f"/tasks?{_tasks_query(status=status, page=page, page_size=page_size, q=q)}"
 
 
 def _list_task_templates_with_recent_jobs(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:

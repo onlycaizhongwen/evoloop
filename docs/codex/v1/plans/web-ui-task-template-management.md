@@ -85,6 +85,12 @@
 - The generated default smoke worktree now writes `test_calculator.py` as a standard-library `unittest` test while preserving the same calculator patch scenario.
 - The default smoke worktree is still reset only for `.tmp/omx-unified-diff-smoke`, so user-provided worktrees are not overwritten.
 
+## 2026-06-01 Task Manager Query Preservation
+
+- Task manager stop/delete actions now preserve the current status, page, page size, and search query when redirecting back to `/tasks`.
+- Task manager filter and pagination links now URL-encode the query value, keeping searched list views stable for names with spaces or non-ASCII text.
+- Validation: `python -m pytest -q tests/test_web_ui.py` passed with `46 passed`.
+
 ## 2026-05-27 Task Management Navigation
 
 - Web UI now has a top navigation menu with `新建任务` and `任务管理`.

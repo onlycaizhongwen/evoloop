@@ -15,7 +15,7 @@ from orchestrator.domain.models.patch_plan import PatchApplyResult, PatchPlan
 from orchestrator.domain.models.run_state import RunState
 from orchestrator.infrastructure.patches.patch_approval import PendingPatchWriter
 from orchestrator.infrastructure.persistence.sqlite_job_repository import SQLiteJobRepository
-from orchestrator.interfaces.web.main import app
+from orchestrator.interfaces.web.main import _tasks_url, app
 
 
 def test_web_index_renders(monkeypatch, tmp_path: Path):
@@ -541,8 +541,8 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert "已完成模板任务" in response.text
     assert 'href="/jobs/job-running-template"' in response.text
     assert 'href="/runs/run-done-template"' in response.text
-    assert 'action="/tasks/job-running-template/stop?status=all&page=1&page_size=10&q="' in response.text
-    assert 'action="/tasks/job-running-template/delete?status=all&page=1&page_size=10&q="' in response.text
+    assert 'action="/tasks/job-running-template/stop?status=all&amp;page=1&amp;page_size=10&amp;q="' in response.text
+    assert 'action="/tasks/job-running-template/delete?status=all&amp;page=1&amp;page_size=10&amp;q="' in response.text
     assert "停止" in response.text
     assert "删除" in response.text
     assert 'data-confirm="确认停止该任务？系统会向当前 local/Docker 命令发送终止信号；若任务尚未进入命令执行阶段，则冻结 Web 状态。"' in response.text
@@ -583,6 +583,8 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert "job-done-template" in searched.text
     assert "job-running-template" not in searched.text
     assert 'value="已完成模板任务"' in searched.text
+    assert 'href="/tasks?status=running' in searched.text
+    assert "&amp;q=" in searched.text
 
 
 def test_task_manager_paginates_jobs(monkeypatch, tmp_path: Path):
@@ -612,8 +614,8 @@ def test_task_manager_paginates_jobs(monkeypatch, tmp_path: Path):
 
     assert response.status_code == 200
     assert "共 12 条，第 2 / 3 页" in response.text
-    assert 'href="/tasks?status=failed&page=1&page_size=5&q="' in response.text
-    assert 'href="/tasks?status=failed&page=3&page_size=5&q="' in response.text
+    assert 'href="/tasks?status=failed&amp;page=1&amp;page_size=5&amp;q="' in response.text
+    assert 'href="/tasks?status=failed&amp;page=3&amp;page_size=5&amp;q="' in response.text
     assert "job-page-06" in response.text
     assert "job-page-05" in response.text
     assert "job-page-11" not in response.text
@@ -641,10 +643,13 @@ def test_task_manager_stops_and_deletes_jobs(monkeypatch, tmp_path: Path):
     )
     client = TestClient(app)
 
-    stop_response = client.post("/tasks/job-stop-delete/stop?status=running&page=1&page_size=10", follow_redirects=False)
+    stop_response = client.post(
+        "/tasks/job-stop-delete/stop?status=running&page=1&page_size=10&q=运行中 任务",
+        follow_redirects=False,
+    )
 
     assert stop_response.status_code == 303
-    assert stop_response.headers["location"] == "/tasks?status=running&page=1&page_size=10"
+    assert stop_response.headers["location"] == "/tasks?status=running&page=1&page_size=10&q=%E8%BF%90%E8%A1%8C%E4%B8%AD+%E4%BB%BB%E5%8A%A1"
     stopped = repository.get("job-stop-delete")
     assert stopped is not None
     assert stopped["status"] == "stopped"
@@ -655,11 +660,20 @@ def test_task_manager_stops_and_deletes_jobs(monkeypatch, tmp_path: Path):
     assert stopped_detail.status_code == 200
     assert "已提交停止请求" in stopped_detail.text
 
-    delete_response = client.post("/tasks/job-stop-delete/delete?status=all&page=1&page_size=10", follow_redirects=False)
+    delete_response = client.post(
+        "/tasks/job-stop-delete/delete?status=all&page=1&page_size=10&q=运行中 任务",
+        follow_redirects=False,
+    )
 
     assert delete_response.status_code == 303
-    assert delete_response.headers["location"] == "/tasks?status=all&page=1&page_size=10"
+    assert delete_response.headers["location"] == "/tasks?status=all&page=1&page_size=10&q=%E8%BF%90%E8%A1%8C%E4%B8%AD+%E4%BB%BB%E5%8A%A1"
     assert repository.get("job-stop-delete") is None
+
+
+def test_task_manager_url_preserves_query():
+    url = _tasks_url(status="running", page=2, page_size=20, q="abc def")
+
+    assert url == "/tasks?status=running&page=2&page_size=20&q=abc+def"
 
 
 def test_task_manager_tolerates_legacy_job_without_task_path(monkeypatch, tmp_path: Path):
