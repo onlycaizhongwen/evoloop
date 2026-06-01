@@ -52,7 +52,7 @@
       </div>
       <div class="metric">
         <span>运行状态</span>
-        <strong>{{ state.status }} / {{ state.current_phase }}</strong>
+        <strong>{{ state_status_label }} / {{ state.current_phase }}</strong>
       </div>
       <div class="metric">
         <span>更新时间</span>
@@ -64,7 +64,7 @@
       <section class="panel">
         <h2>执行摘要</h2>
         <div class="evidence-grid">
-          <div><span>状态</span><strong>{{ execution_summary.status }}</strong></div>
+          <div><span>状态</span><strong>{{ execution_summary.status_label }}</strong></div>
           <div><span>当前阶段</span><strong>{{ execution_summary.phase }}</strong></div>
           <div><span>尝试次数</span><strong>{{ execution_summary.attempt }}</strong></div>
           <div><span>补丁状态</span><strong>{{ execution_summary.patch_stats }}</strong></div>

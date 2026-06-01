@@ -275,6 +275,7 @@ def test_job_status_infers_run_and_shows_progress(monkeypatch, tmp_path: Path):
 
     assert response.status_code == 200
     assert "run-progress" in response.text
+    assert "运行中" in response.text
     assert "quality_gate" in response.text
     assert "1/2" in response.text
     assert "phase=quality_gate" in response.text
@@ -321,6 +322,7 @@ def test_run_detail_shows_no_docker_evidence_for_local_run(monkeypatch, tmp_path
 
     assert response.status_code == 200
     assert "执行摘要" in response.text
+    assert "已完成 / done" in response.text
     assert "Docker 执行" in response.text
     assert "无记录" in response.text
     assert "Docker 执行证据" in response.text

@@ -257,7 +257,7 @@ def job_status(request: Request, job_id: str, reused: str = "", rerun_error: str
             "job": job,
             "job_id": job_id,
             "run_id": run_id,
-            "progress": progress,
+            "progress": _label_job_progress(progress),
             "task_context": task_context,
             "task_meta": _build_job_task_meta(job, task_context),
             "failure_hint": failure_hint,
@@ -370,6 +370,7 @@ def run_detail(request: Request, run_id: str):
             "state": state,
             "run_id": run_id,
             "run_dir": run_dir,
+            "state_status_label": _status_label(str(state.status)),
             "summary": _build_run_summary(state, patches),
             "execution_summary": _build_execution_summary(state, patches, docker_evidence, phase_timeline),
             "execution_chain": _build_execution_chain(
@@ -1022,6 +1023,7 @@ def _build_execution_summary(
         docker_label = f"{docker_evidence.get('count', 0)} 次 / {docker_evidence.get('image') or '镜像未记录'}"
     return {
         "status": str(state.status),
+        "status_label": _status_label(str(state.status)),
         "phase": str(state.current_phase or "未记录"),
         "attempt": f"{state.attempt}/{state.max_attempts}",
         "patch_stats": f"待审批 {pending_count} / 已批准 {applied_count} / 已拒绝 {rejected_count}",
@@ -1382,6 +1384,7 @@ def _load_job_progress(run_id: str | None) -> dict[str, str] | None:
     return {
         "run_id": state.run_id,
         "status": str(state.status),
+        "status_label": _status_label(str(state.status)),
         "phase": state.current_phase,
         "attempt": f"{state.attempt}/{state.max_attempts}",
         "updated_at": state.updated_at.isoformat(),
@@ -1450,6 +1453,14 @@ def _empty_docker_evidence(log_path: Path | None = None) -> dict[str, object]:
         "recent_logs": [],
         "log_path": log_path.as_posix() if log_path else "",
     }
+
+
+def _label_job_progress(progress: dict[str, str] | None) -> dict[str, str] | None:
+    if progress is None:
+        return None
+    labeled = dict(progress)
+    labeled.setdefault("status_label", _status_label(str(progress.get("status") or "")))
+    return labeled
 
 
 def _load_task_context(run_dir: Path) -> dict[str, str]:
