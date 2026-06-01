@@ -110,6 +110,12 @@
 - Job status pages render a visible warning explaining that the task cannot be rerun because the original `task.json` is missing, instead of appearing to do nothing.
 - Validation: `python -m pytest -q tests/test_web_ui.py` passed with `48 passed`.
 
+## 2026-06-01 Rerun Recovery Actions
+
+- Missing-task rerun warnings now include direct recovery actions: `返回任务管理` and `新建任务`.
+- Warning alerts now have a distinct yellow treatment so recoverable operator attention states are visually separate from danger and info states.
+- Validation: `python -m pytest -q tests/test_web_ui.py` passed with `48 passed`.
+
 ## 2026-05-27 Task Management Navigation
 
 - Web UI now has a top navigation menu with `新建任务` and `任务管理`.

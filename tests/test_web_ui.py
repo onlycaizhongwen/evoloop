@@ -175,6 +175,8 @@ def test_job_status_rerun_missing_task_shows_feedback(monkeypatch, tmp_path: Pat
     assert detail.status_code == 200
     assert "无法重新运行" in detail.text
     assert "没有找到该任务的原始 task.json" in detail.text
+    assert 'href="/tasks">返回任务管理</a>' in detail.text
+    assert 'href="/">新建任务</a>' in detail.text
 
 
 def test_job_status_shows_reused_template_notice(monkeypatch, tmp_path: Path):

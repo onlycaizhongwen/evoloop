@@ -428,9 +428,22 @@ h2 {
   color: #2d5f99;
 }
 
+.alert.warning {
+  border-color: #ead3a2;
+  background: #fffaf0;
+  color: #7a5b18;
+}
+
 .alert ul {
   margin: 0;
   padding-left: 20px;
+}
+
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
 }
 
 .stack {
