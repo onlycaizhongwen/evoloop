@@ -237,7 +237,7 @@ def run_example(
 
 
 @app.get("/jobs/{job_id}", response_class=HTMLResponse)
-def job_status(request: Request, job_id: str, reused: str = ""):
+def job_status(request: Request, job_id: str, reused: str = "", rerun_error: str = ""):
     job = _read_job(job_id)
     if not job:
         return RedirectResponse(url="/", status_code=303)
@@ -270,6 +270,7 @@ def job_status(request: Request, job_id: str, reused: str = ""):
                 patches=[],
             ),
             "reused_existing_job": reused == "1",
+            "rerun_error": _build_rerun_error(rerun_error),
             "auto_refresh": job.get("status") == "running",
         },
     )
@@ -403,7 +404,7 @@ def rerun_job(job_id: str):
     run_id = str(job.get("run_id") or "")
     task_path = _task_path_for_job(job, run_id)
     if not task_path:
-        return RedirectResponse(url=f"/jobs/{_safe_id(job_id)}", status_code=303)
+        return RedirectResponse(url=f"/jobs/{_safe_id(job_id)}?rerun_error=missing_task", status_code=303)
     new_job_id = _rerun_task_path(task_path)
     return RedirectResponse(url=f"/jobs/{new_job_id}", status_code=303)
 
@@ -841,6 +842,17 @@ def _build_job_failure_hint(job: dict[str, Any], progress: dict[str, str] | None
         "reason": message,
         "next_action": _suggest_next_action(phase, message),
     }
+
+
+def _build_rerun_error(code: str) -> dict[str, str]:
+    if code == "missing_task":
+        return {
+            "enabled": "1",
+            "title": "无法重新运行",
+            "message": "没有找到该任务的原始 task.json，通常是早期历史任务或任务文件已被移动。",
+            "next_action": "返回任务管理重新创建任务，或打开保留的 run 详情复制启动配置。",
+        }
+    return {"enabled": ""}
 
 
 def _build_run_failure_hint(state: RunState, final_report: str, phase_log: str) -> dict[str, str]:

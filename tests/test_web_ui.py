@@ -151,6 +151,32 @@ def test_job_status_reruns_task_from_original_task_json(monkeypatch, tmp_path: P
     assert copied["title"].endswith("（重新运行）")
 
 
+def test_job_status_rerun_missing_task_shows_feedback(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+    SQLiteJobRepository(tmp_path / ".omx" / "orchestrator.db").create(
+        {
+            "job_id": "job-missing-task-rerun",
+            "status": "failed",
+            "message": "legacy failed",
+            "task_path": "",
+            "run_id": "",
+        }
+    )
+    client = TestClient(app)
+
+    response = client.post("/jobs/job-missing-task-rerun/rerun", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/jobs/job-missing-task-rerun?rerun_error=missing_task"
+
+    detail = client.get(response.headers["location"])
+
+    assert detail.status_code == 200
+    assert "无法重新运行" in detail.text
+    assert "没有找到该任务的原始 task.json" in detail.text
+
+
 def test_job_status_shows_reused_template_notice(monkeypatch, tmp_path: Path):
     monkeypatch.chdir(tmp_path)
     task_path = tmp_path / ".omx" / "web-tasks" / "task-reused-template.json"

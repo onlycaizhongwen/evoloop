@@ -104,6 +104,12 @@
 - Running jobs intentionally hide row-level rerun to avoid accidentally starting duplicate work while the original job is active.
 - Validation: `python -m pytest -q tests/test_web_ui.py` passed with `47 passed`.
 
+## 2026-06-01 Rerun Missing Task Feedback
+
+- Job rerun now redirects back with `rerun_error=missing_task` when the original task JSON cannot be found.
+- Job status pages render a visible warning explaining that the task cannot be rerun because the original `task.json` is missing, instead of appearing to do nothing.
+- Validation: `python -m pytest -q tests/test_web_ui.py` passed with `48 passed`.
+
 ## 2026-05-27 Task Management Navigation
 
 - Web UI now has a top navigation menu with `新建任务` and `任务管理`.

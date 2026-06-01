@@ -28,6 +28,14 @@
     </section>
     {% endif %}
 
+    {% if rerun_error.enabled %}
+    <section class="alert warning">
+      <strong>{{ rerun_error.title }}</strong>
+      <span>{{ rerun_error.message }}</span>
+      <span>{{ rerun_error.next_action }}</span>
+    </section>
+    {% endif %}
+
     <section class="hero-status {% if job.status == 'failed' %}danger{% elif job.status == 'stopped' %}warning{% else %}info{% endif %}">
       <div>
         <p class="eyebrow">当前状态</p>
