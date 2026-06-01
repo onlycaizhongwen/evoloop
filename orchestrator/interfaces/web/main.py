@@ -270,6 +270,7 @@ def job_status(request: Request, job_id: str, reused: str = ""):
                 patches=[],
             ),
             "reused_existing_job": reused == "1",
+            "auto_refresh": job.get("status") == "running",
         },
     )
 

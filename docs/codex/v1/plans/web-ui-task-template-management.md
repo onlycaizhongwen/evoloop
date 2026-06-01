@@ -91,6 +91,13 @@
 - Task manager filter and pagination links now URL-encode the query value, keeping searched list views stable for names with spaces or non-ASCII text.
 - Validation: `python -m pytest -q tests/test_web_ui.py` passed with `46 passed`.
 
+## 2026-06-01 Stopped Task Visibility
+
+- Task manager now exposes an `已停止` status filter card backed by the existing persisted `stopped` job status count.
+- Stopped task lists no longer auto-refresh and show a dedicated note explaining that stop freezes the Web Job while preserving run audit artifacts.
+- Job status pages now auto-refresh only while the job is still `running`; stopped jobs stay stable for reading the stop message and follow-up actions.
+- Validation: `python -m pytest -q tests/test_web_ui.py` passed with `47 passed`.
+
 ## 2026-05-27 Task Management Navigation
 
 - Web UI now has a top navigation menu with `新建任务` and `任务管理`.

@@ -44,12 +44,21 @@
           <span>失败</span>
           <strong>{{ counts.failed }}</strong>
         </a>
+        <a class="metric task-filter {% if active_status == 'stopped' %}active{% endif %}" href="/tasks?status=stopped&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
+          <span>已停止</span>
+          <strong>{{ counts.stopped }}</strong>
+        </a>
       </section>
 
       {% if active_status == "running" %}
       <section class="alert info">
         <strong>运行中列表会自动刷新</strong>
         <span>点击停止会向当前 local/Docker 命令发送终止信号；如果任务还没进入命令执行阶段，则会冻结 Web Job 状态。</span>
+      </section>
+      {% elif active_status == "stopped" %}
+      <section class="alert warning">
+        <strong>已停止任务不会自动刷新</strong>
+        <span>停止只冻结 Web Job 并尽量终止当前命令；run 目录和审计日志会继续保留。</span>
       </section>
       {% endif %}
 

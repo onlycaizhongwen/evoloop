@@ -84,6 +84,26 @@ def test_job_status_reads_persisted_job(monkeypatch, tmp_path: Path):
     assert "删除记录" in response.text
 
 
+def test_job_status_stopped_does_not_auto_refresh(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+    SQLiteJobRepository(tmp_path / ".omx" / "orchestrator.db").create(
+        {
+            "job_id": "job-stopped",
+            "status": "stopped",
+            "message": "已收到停止请求。",
+            "task_path": "",
+            "run_id": "",
+        }
+    )
+
+    response = TestClient(app).get("/jobs/job-stopped")
+
+    assert response.status_code == 200
+    assert "已提交停止请求" in response.text
+    assert '<meta http-equiv="refresh" content="3">' not in response.text
+
+
 def test_job_status_reruns_task_from_original_task_json(monkeypatch, tmp_path: Path):
     monkeypatch.chdir(tmp_path)
     task_path = tmp_path / ".omx" / "web-tasks" / "task-rerun-source.json"
@@ -525,6 +545,7 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert "任务管理" in response.text
     assert "运行中" in response.text
     assert "已完成" in response.text
+    assert "已停止" in response.text
     assert "job-running-template" in response.text
     assert "job-done-template" in response.text
     assert "Docker OMX Team Patch" in response.text
@@ -576,6 +597,12 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert "job-done-template" not in filtered.text
     assert '<meta http-equiv="refresh" content="5">' in filtered.text
     assert "运行中列表会自动刷新" in filtered.text
+
+    stopped = TestClient(app).get("/tasks?status=stopped")
+
+    assert stopped.status_code == 200
+    assert "已停止任务不会自动刷新" in stopped.text
+    assert '<meta http-equiv="refresh" content="5">' not in stopped.text
 
     searched = TestClient(app).get("/tasks?q=已完成模板任务")
 
