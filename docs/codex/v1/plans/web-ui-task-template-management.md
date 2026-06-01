@@ -182,3 +182,11 @@
 - Patch artifacts are summarized in the same panel with patch file name, status, risk score, and changed files, so users can locate generated patch JSON without manually browsing `.omx/runs`.
 - Missing files render as `暂无记录` instead of failing the page, preserving compatibility with legacy or partially-created runs.
 - Validation: `python -m pytest -q tests/test_web_ui.py` passed with `45 passed`.
+
+## 2026-06-01 Productized Task Creation Form
+
+- The `/tasks` create-task modal is now grouped into `基础信息`, `执行方式`, `工作区与权限`, `验证配置`, and a collapsed `高级配置` section.
+- The form includes a `将会如何执行` preview that summarizes backend, agent mode, command preset, check command, allowed paths, and worktree before submission.
+- Advanced Docker sandbox and raw agent command fields remain available but are no longer mixed into the primary path for recommended templates.
+- Submit buttons now switch to `提交中...` and disable themselves while the browser posts the task form.
+- Validation: `python -m pytest -q tests/test_web_ui.py` passed with `45 passed`.

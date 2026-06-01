@@ -156,84 +156,139 @@
         <h2 id="task-create-title">新建任务</h2>
         <button type="button" class="icon-button" data-close-modal="task-create-modal" aria-label="关闭">×</button>
       </div>
-      <form method="post" action="/tasks/run">
+      <form method="post" action="/tasks/run" class="task-create-form">
         <input type="hidden" name="template_id" value="{{ form.template_id }}">
-        <label>任务模板
-          <select name="template_id">
-            {% for template in task_templates %}
-            <option value="{{ template.id }}" {% if form.template_id == template.id %}selected{% endif %}>{{ template.label }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <div class="row">
-          <label>Task ID <input name="task_id" value="{{ form.task_id }}" required></label>
-          <label>类型
-            <select name="change_type">
-              {% for option in ["bugfix", "feature", "refactor", "config"] %}
-              <option value="{{ option }}" {% if form.change_type == option %}selected{% endif %}>{{ option }}</option>
+        <section class="form-section">
+          <div class="form-section-title">
+            <h3>基础信息</h3>
+            <p>描述这次希望智能体完成的编码任务。</p>
+          </div>
+          <label>任务模板
+            <select name="template_id">
+              {% for template in task_templates %}
+              <option value="{{ template.id }}" {% if form.template_id == template.id %}selected{% endif %}>{{ template.label }}</option>
               {% endfor %}
             </select>
+            <span class="field-help">推荐优先选择 Docker OMX Team Patch，系统会自动填充安全执行配置。</span>
           </label>
-        </div>
-        <label>标题 <input name="title" value="{{ form.title }}" required></label>
-        <label>描述 <textarea name="description" rows="4" required>{{ form.description }}</textarea></label>
-        <div class="row">
-          <label>Agent
-            <select name="agent_mode">
-              <option value="omx_team_patch" {% if form.agent_mode == "omx_team_patch" %}selected{% endif %}>omx_team_patch</option>
-              <option value="omx_patch" {% if form.agent_mode == "omx_patch" %}selected{% endif %}>omx_patch</option>
-              <option value="omx" {% if form.agent_mode == "omx" %}selected{% endif %}>omx</option>
-              <option value="codex" {% if form.agent_mode == "codex" %}selected{% endif %}>codex</option>
-              <option value="shell" {% if form.agent_mode == "shell" %}selected{% endif %}>shell</option>
-              <option value="mock" {% if form.agent_mode == "mock" %}selected{% endif %}>mock</option>
-            </select>
-          </label>
-          <label>Execution backend
-            <select name="execution_backend">
-              <option value="local" {% if form.execution_backend == "local" %}selected{% endif %}>local</option>
-              <option value="docker" {% if form.execution_backend == "docker" %}selected{% endif %}>docker</option>
-            </select>
-          </label>
-        </div>
-        <label>Worktree <input name="worktree_path" value="{{ form.worktree_path }}" required></label>
-        <label>Allowed paths <textarea name="allowed_paths" rows="3">{{ form.allowed_paths }}</textarea></label>
-        <div class="row">
-          <label>Docker image <input name="sandbox_image" value="{{ form.sandbox_image }}"></label>
+          <div class="row">
+            <label>Task ID
+              <input name="task_id" value="{{ form.task_id }}" required>
+              <span class="field-help">仅使用字母、数字、横线或下划线。</span>
+            </label>
+            <label>类型
+              <select name="change_type">
+                {% for option in ["bugfix", "feature", "refactor", "config"] %}
+                <option value="{{ option }}" {% if form.change_type == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+              </select>
+            </label>
+          </div>
+          <label>标题 <input name="title" value="{{ form.title }}" required></label>
+          <label>描述 <textarea name="description" rows="4" required>{{ form.description }}</textarea></label>
+        </section>
+
+        <section class="form-section">
+          <div class="form-section-title">
+            <h3>执行方式</h3>
+            <p>选择由哪个 agent 和执行环境完成任务。</p>
+          </div>
+          <div class="row">
+            <label>Agent
+              <select name="agent_mode">
+                <option value="omx_team_patch" {% if form.agent_mode == "omx_team_patch" %}selected{% endif %}>omx_team_patch：OMX Team 编排</option>
+                <option value="omx_patch" {% if form.agent_mode == "omx_patch" %}selected{% endif %}>omx_patch：单智能体补丁模式</option>
+                <option value="omx" {% if form.agent_mode == "omx" %}selected{% endif %}>omx：OMX 入口</option>
+                <option value="codex" {% if form.agent_mode == "codex" %}selected{% endif %}>codex：Codex 直接执行</option>
+                <option value="shell" {% if form.agent_mode == "shell" %}selected{% endif %}>shell：本地脚本模式</option>
+                <option value="mock" {% if form.agent_mode == "mock" %}selected{% endif %}>mock：流程演示</option>
+              </select>
+            </label>
+            <label>Execution backend
+              <select name="execution_backend">
+                <option value="local" {% if form.execution_backend == "local" %}selected{% endif %}>local</option>
+                <option value="docker" {% if form.execution_backend == "docker" %}selected{% endif %}>docker</option>
+              </select>
+            </label>
+          </div>
           <label>Docker agent 命令预设
             <select name="command_preset">
               {% for preset in docker_agent_command_presets %}
               <option value="{{ preset.id }}" {% if form.command_preset == preset.id %}selected{% endif %}>{{ preset.label }}</option>
               {% endfor %}
             </select>
+            <span class="field-help">使用推荐模板时无需手写 /worktree、/run 等容器路径。</span>
           </label>
-        </div>
-        <div class="row">
-          <label>Docker network
-            <select name="sandbox_network">
-              {% for option in ["none", "bridge"] %}
-              <option value="{{ option }}" {% if form.sandbox_network == option %}selected{% endif %}>{{ option }}</option>
-              {% endfor %}
-            </select>
+          <div class="config-preview">
+            <strong>将会如何执行</strong>
+            <div class="evidence-grid">
+              <div><span>执行环境</span><strong>{{ form.execution_backend }}</strong></div>
+              <div><span>Agent</span><strong>{{ form.agent_mode }}</strong></div>
+              <div><span>命令预设</span><strong>{{ form.command_preset }}</strong></div>
+              <div><span>检查命令</span><strong>{{ form.check_command or "关闭" }}</strong></div>
+              <div><span>允许修改</span><strong>{{ form.allowed_paths }}</strong></div>
+              <div><span>Worktree</span><strong>{{ form.worktree_path }}</strong></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <div class="form-section-title">
+            <h3>工作区与权限</h3>
+            <p>限制智能体只能在明确允许的工作区和文件范围内行动。</p>
+          </div>
+          <label>Worktree
+            <input name="worktree_path" value="{{ form.worktree_path }}" required>
+            <span class="field-help">任务会在这个绝对路径工作区内运行。</span>
           </label>
-          <label>Worktree mount
-            <select name="sandbox_worktree_mount">
-              {% for option in ["readonly", "rw"] %}
-              <option value="{{ option }}" {% if form.sandbox_worktree_mount == option %}selected{% endif %}>{{ option }}</option>
-              {% endfor %}
-            </select>
+          <label>Allowed paths
+            <textarea name="allowed_paths" rows="3">{{ form.allowed_paths }}</textarea>
+            <span class="field-help">一行一个允许修改的相对路径。</span>
           </label>
-        </div>
-        <div class="row">
-          <label>Memory limit <input name="sandbox_memory_limit" value="{{ form.sandbox_memory_limit }}"></label>
-          <label>CPU limit <input name="sandbox_cpu_limit" value="{{ form.sandbox_cpu_limit }}"></label>
-        </div>
-        <label>Test command <input name="check_command" value="{{ form.check_command }}"></label>
-        <label>Patch coder / Team command <input name="patch_coder" value='{{ form.patch_coder }}'></label>
-        <label>Patch fixer <input name="patch_fixer" value='{{ form.patch_fixer }}'></label>
-        <label>Reviewer <input name="reviewer" value='{{ form.reviewer }}'></label>
-        <label class="check"><input type="checkbox" name="real_checks" {% if form.real_checks %}checked{% endif %}> 运行真实检查</label>
+        </section>
+
+        <section class="form-section">
+          <div class="form-section-title">
+            <h3>验证配置</h3>
+            <p>控制任务完成后是否运行真实测试或检查命令。</p>
+          </div>
+          <label>Test command <input name="check_command" value="{{ form.check_command }}"></label>
+          <label class="check"><input type="checkbox" name="real_checks" {% if form.real_checks %}checked{% endif %}> 运行真实检查</label>
+        </section>
+
+        <details class="advanced-config">
+          <summary>高级配置</summary>
+          <div class="form-section">
+            <div class="row">
+              <label>Docker image <input name="sandbox_image" value="{{ form.sandbox_image }}"></label>
+              <label>Docker network
+                <select name="sandbox_network">
+                  {% for option in ["none", "bridge"] %}
+                  <option value="{{ option }}" {% if form.sandbox_network == option %}selected{% endif %}>{{ option }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+            </div>
+            <div class="row">
+              <label>Worktree mount
+                <select name="sandbox_worktree_mount">
+                  {% for option in ["readonly", "rw"] %}
+                  <option value="{{ option }}" {% if form.sandbox_worktree_mount == option %}selected{% endif %}>{{ option }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <label>Memory limit <input name="sandbox_memory_limit" value="{{ form.sandbox_memory_limit }}"></label>
+            </div>
+            <div class="row">
+              <label>CPU limit <input name="sandbox_cpu_limit" value="{{ form.sandbox_cpu_limit }}"></label>
+              <label>Reviewer <input name="reviewer" value='{{ form.reviewer }}'></label>
+            </div>
+            <label>Patch coder / Team command <input name="patch_coder" value='{{ form.patch_coder }}'></label>
+            <label>Patch fixer <input name="patch_fixer" value='{{ form.patch_fixer }}'></label>
+          </div>
+        </details>
         <div class="actions">
-          <button type="submit">提交任务</button>
+          <button type="submit" data-submitting-text="提交中...">提交任务</button>
           <button type="button" class="secondary" data-close-modal="task-create-modal">取消</button>
         </div>
       </form>
@@ -261,6 +316,15 @@
       button.addEventListener("click", (event) => {
         if (!window.confirm(button.dataset.confirm)) {
           event.preventDefault();
+        }
+      });
+    });
+    document.querySelectorAll(".task-create-form").forEach((form) => {
+      form.addEventListener("submit", () => {
+        const button = form.querySelector("button[type='submit']");
+        if (button) {
+          button.disabled = true;
+          button.textContent = button.dataset.submittingText || "提交中...";
         }
       });
     });

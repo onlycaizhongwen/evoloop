@@ -727,6 +727,73 @@ button.danger {
   padding: 18px;
 }
 
+.task-create-form {
+  display: grid;
+  gap: 14px;
+}
+
+.form-section {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.form-section-title {
+  display: grid;
+  gap: 2px;
+}
+
+.form-section-title h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.form-section-title p,
+.field-help {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.field-help {
+  font-weight: 500;
+}
+
+.config-preview {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #c8d8ee;
+  border-radius: 6px;
+  background: #f4f8ff;
+  padding: 12px;
+}
+
+.config-preview .evidence-grid {
+  margin-bottom: 0;
+}
+
+.advanced-config {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.advanced-config summary {
+  cursor: pointer;
+  padding: 12px 14px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.advanced-config .form-section {
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 8px 8px;
+  background: #fff;
+}
+
 .list {
   display: grid;
   gap: 10px;

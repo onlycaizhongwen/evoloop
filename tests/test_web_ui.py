@@ -559,7 +559,15 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert 'name="task_id"' in response.text
     assert 'name="description"' in response.text
     assert 'name="command_preset"' in response.text
+    assert "基础信息" in response.text
+    assert "执行方式" in response.text
+    assert "工作区与权限" in response.text
+    assert "验证配置" in response.text
+    assert "高级配置" in response.text
+    assert "将会如何执行" in response.text
+    assert "使用推荐模板时无需手写 /worktree、/run 等容器路径" in response.text
     assert "提交任务" in response.text
+    assert 'data-submitting-text="提交中..."' in response.text
 
     filtered = TestClient(app).get("/tasks?status=running")
 

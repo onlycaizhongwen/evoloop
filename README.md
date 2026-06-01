@@ -6,7 +6,7 @@ Evoloop 是一个自动循环进化编码智能体系统原型。它把任务提
 
 ## 当前能力
 
-- Web UI 任务管理：`/tasks` 提供任务列表、运行中/已完成/失败/停止状态、搜索、分页、新建任务、停止和删除记录。
+- Web UI 任务管理：`/tasks` 提供任务列表、运行中/已完成/失败/停止状态、搜索、分页、分区式新建任务表单、停止和删除记录。
 - 任务模板：内置 `Local OMX Team Patch`、`Docker OMX Team Patch`、`Docker Patch JSON` 和 `Mock Flow Demo`，避免用户手写复杂命令。
 - OMX/Codex 执行适配：支持 `mock`、`shell`、`codex`、`omx`、`omx_patch`、`omx_team_patch` agent mode。
 - Docker 沙箱：Docker 后端使用安全的 `/worktree`、`/run`、`/cache` 路径约束，运行证据写入 run 日志。
@@ -47,7 +47,7 @@ python -m orchestrator.interfaces.web.main
 http://127.0.0.1:8765/tasks?page=1&page_size=10
 ```
 
-推荐先在任务管理页点击“新建任务”，选择模板：
+推荐先在任务管理页点击“新建任务”，选择模板。新建弹窗按基础信息、执行方式、工作区与权限、验证配置和高级配置分区，并会在提交前展示“将会如何执行”的摘要：
 
 - `Docker OMX Team Patch`：推荐路径，使用 Docker 沙箱运行 team result backend。
 - `Docker Patch JSON`：单 agent patch JSON 验证路径。
