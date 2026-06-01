@@ -4,6 +4,18 @@ Evoloop 是一个自动循环进化编码智能体系统原型。它把任务提
 
 当前重点是让 Orchestrator 负责流程控制和安全边界，让 OMX/Codex/本地或 Docker agent 负责执行，让 Web UI 提供可上手的任务管理体验。
 
+## 常用链接
+
+- GitHub 仓库：[onlycaizhongwen/evoloop](https://github.com/onlycaizhongwen/evoloop)
+- 本地任务管理页：[http://127.0.0.1:8765/tasks?page=1&page_size=10](http://127.0.0.1:8765/tasks?page=1&page_size=10)
+- 本地首页：[http://127.0.0.1:8765/](http://127.0.0.1:8765/)
+- 当前状态文档：[docs/codex/v1/status.md](docs/codex/v1/status.md)
+- V7 架构设计：[docs/codex/v1/designs/自动循环进化编码智能体系统-v7.md](docs/codex/v1/designs/自动循环进化编码智能体系统-v7.md)
+- Agent 协议：[docs/codex/v1/designs/自动循环进化编码智能体系统-agent-protocol.md](docs/codex/v1/designs/自动循环进化编码智能体系统-agent-protocol.md)
+- Docker 沙箱设计：[docs/codex/v1/designs/docker-sandbox-runner-design.md](docs/codex/v1/designs/docker-sandbox-runner-design.md)
+- Web UI 迭代记录：[docs/codex/v1/plans/web-ui-task-template-management.md](docs/codex/v1/plans/web-ui-task-template-management.md)
+- 演讲大纲：[docs/codex/v1/presentation/自动循环进化编码智能体系统-演讲大纲.md](docs/codex/v1/presentation/自动循环进化编码智能体系统-演讲大纲.md)
+
 ## 当前能力
 
 - Web UI 任务管理：`/tasks` 提供任务列表、运行中/已完成/失败/已停止筛选、搜索、分页、新建任务弹窗、停止、删除、重新运行。
@@ -15,6 +27,53 @@ Evoloop 是一个自动循环进化编码智能体系统原型。它把任务提
 - 运行详情：Run 详情页展示任务元数据、失败原因、执行摘要、阶段时间线、执行链路、运行产物、Docker 证据、最终报告和诊断日志。
 - 任务控制：Web 启动的 local/Docker 命令会注册到取消表，停止任务时会尝试终止底层进程。
 - 重跑体验：完成、失败或已停止的任务可以从任务列表或详情页重新运行；缺少原始 `task.json` 时会显示明确原因和恢复入口。
+
+## 架构概览
+
+```mermaid
+flowchart LR
+    User[用户 / 演示人员] --> Web[FastAPI Web UI]
+    Web --> Jobs[(SQLite Web Jobs)]
+    Web --> Orchestrator[Orchestrator<br/>流程控制与安全边界]
+    Orchestrator --> Agent{Agent Adapter}
+    Agent --> OMX[OMX / Codex]
+    Agent --> Shell[Shell Agent]
+    Agent --> Mock[Mock Agent]
+    Orchestrator --> Docker[Docker Sandbox]
+    Docker --> Worktree[/worktree/]
+    Docker --> RunDir[/run/]
+    Orchestrator --> Patch[Patch Validator / Applier]
+    Patch --> Approval[Pending Patch Approval]
+    Orchestrator --> Gate[Quality Gate]
+    Gate --> Tests[Hard Checks / pytest]
+    Orchestrator --> Artifacts[(.omx/runs/<run_id>)]
+    Artifacts --> Detail[Run Detail / Audit]
+    Web --> Detail
+```
+
+## 自动循环流程
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant W as Web UI
+    participant O as Orchestrator
+    participant A as OMX/Codex Agent
+    participant D as Docker/Local Runner
+    participant P as Patch Approval
+    participant Q as Quality Gate
+
+    U->>W: 新建任务 / 选择模板
+    W->>O: 写入 task.json 并启动 Job
+    O->>A: 构造 prompt / 调用 agent
+    A-->>O: 返回 patch JSON 或 team result
+    O->>D: 应用补丁并运行 hard checks
+    O->>P: 高风险或需审批补丁进入 pending
+    P-->>O: 批准 / 拒绝 / 批准后重跑
+    O->>Q: 汇总测试、review、diff risk
+    Q-->>W: 更新 Job/Run 状态
+    W-->>U: 展示执行摘要、时间线、产物和失败原因
+```
 
 ## 项目结构
 
@@ -31,6 +90,17 @@ docs/codex/v1/          # 需求、设计、计划、追踪和状态文档
 examples/               # 示例任务与 smoke 资源
 tests/                  # pytest 回归测试
 ```
+
+## 核心代码入口
+
+- Web UI 入口：[orchestrator/interfaces/web/main.py](orchestrator/interfaces/web/main.py)
+- Web 任务管理模板：[orchestrator/interfaces/web/templates/tasks.html](orchestrator/interfaces/web/templates/tasks.html)
+- Run 详情模板：[orchestrator/interfaces/web/templates/run_detail.html](orchestrator/interfaces/web/templates/run_detail.html)
+- 任务模板注册：[orchestrator/application/task_template_registry.py](orchestrator/application/task_template_registry.py)
+- 任务执行用例：[orchestrator/application/use_cases/run_task.py](orchestrator/application/use_cases/run_task.py)
+- Docker 沙箱执行器：[orchestrator/infrastructure/command/docker_sandbox_runner.py](orchestrator/infrastructure/command/docker_sandbox_runner.py)
+- OMX team patch agent：[orchestrator/infrastructure/agents/omx_team_patch_agent.py](orchestrator/infrastructure/agents/omx_team_patch_agent.py)
+- Pending patch 服务：[orchestrator/infrastructure/patches/pending_patch_service.py](orchestrator/infrastructure/patches/pending_patch_service.py)
 
 ## 快速启动 Web UI
 
