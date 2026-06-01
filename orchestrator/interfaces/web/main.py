@@ -790,6 +790,7 @@ def _build_task_manager_job(job: dict[str, Any]) -> dict[str, str]:
         "task_name": task_context.get("title") or task_context.get("task_id") or job_id,
         "task_id": task_context.get("task_id") or "",
         "status": status,
+        "status_label": _status_label(status),
         "status_class": _status_css_class(status),
         "run_id": run_id,
         "message": str(job.get("message") or ""),
@@ -1247,6 +1248,16 @@ def _status_css_class(status: str) -> str:
     if normalized in {"done", "failed", "running", "stopped"}:
         return normalized
     return "unknown"
+
+
+def _status_label(status: str) -> str:
+    normalized = status.lower().strip()
+    return {
+        "done": "已完成",
+        "failed": "失败",
+        "running": "运行中",
+        "stopped": "已停止",
+    }.get(normalized, status or "未知")
 
 
 def _load_runs() -> list[dict[str, object]]:

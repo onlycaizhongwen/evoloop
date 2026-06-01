@@ -233,3 +233,8 @@
 - Advanced Docker sandbox and raw agent command fields remain available but are no longer mixed into the primary path for recommended templates.
 - Submit buttons now switch to `提交中...` and disable themselves while the browser posts the task form.
 - Validation: `python -m pytest -q tests/test_web_ui.py` passed with `45 passed`.
+
+## 2026-06-01 Localized Task Status Labels
+
+- Task manager status pills now render Chinese labels (`运行中` / `已完成` / `失败` / `已停止`) while keeping the persisted lifecycle statuses in English for filters, CSS classes, and repository state.
+- Validation: `python -m pytest -q tests/test_web_ui.py` passed with `48 passed`; `python -m pytest -q` passed with `133 passed`.

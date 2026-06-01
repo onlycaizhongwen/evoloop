@@ -604,6 +604,9 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert "<th>执行</th>" in response.text
     assert response.text.index("<th>任务名称</th>") < response.text.index("<th>Job ID</th>")
     assert response.text.index("<th>更新时间</th>") < response.text.index("<th>状态</th>")
+    assert '<span class="status-pill running">运行中</span>' in response.text
+    assert '<span class="status-pill done">已完成</span>' in response.text
+    assert '<span class="status-pill failed">失败</span>' in response.text
     assert "运行中模板任务" in response.text
     assert "已完成模板任务" in response.text
     assert 'href="/jobs/job-running-template"' in response.text
