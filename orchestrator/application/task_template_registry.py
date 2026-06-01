@@ -50,7 +50,7 @@ TASK_TEMPLATES: dict[str, dict[str, Any]] = {
             ),
             "change_type": "bugfix",
             "allowed_paths": "calculator.py",
-            "check_command": "python -m pytest -q",
+            "check_command": "python -m unittest -q",
             "agent_mode": "omx_team_patch",
             "command_preset": "custom",
             "execution_backend": "local",

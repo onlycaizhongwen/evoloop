@@ -78,7 +78,7 @@ class TaskForm:
     change_type: str = "bugfix"
     allowed_paths: str = "calculator.py"
     worktree_path: str = ""
-    check_command: str = "python -m pytest -q"
+    check_command: str = "python -m unittest -q"
     agent_mode: str = "omx_team_patch"
     patch_coder: str = ""
     patch_fixer: str = ""
@@ -1532,7 +1532,13 @@ def _prepare_default_smoke_worktree(path: Path) -> None:
     patch_backend = path / "patch_backend.py"
     calculator.write_text("def add(a, b):\n    return a - b\n", encoding="utf-8")
     test_file.write_text(
-        "from calculator import add\n\n\ndef test_add():\n    assert add(1, 2) == 3\n",
+        "import unittest\n\n"
+        "from calculator import add\n\n\n"
+        "class CalculatorTest(unittest.TestCase):\n"
+        "    def test_add(self):\n"
+        "        self.assertEqual(add(1, 2), 3)\n\n\n"
+        "if __name__ == '__main__':\n"
+        "    unittest.main()\n",
         encoding="utf-8",
     )
     team_backend.write_text(_default_docker_team_backend_source(), encoding="utf-8")

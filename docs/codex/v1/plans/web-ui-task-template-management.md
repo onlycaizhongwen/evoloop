@@ -79,6 +79,12 @@
 - The guard remains backend-authoritative: frontend locking improves usability, while SQLite job reuse prevents duplicate execution even if the same POST arrives twice.
 - Validation: `python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` passed with `41 passed`; `python -m py_compile orchestrator/application/task_template_registry.py orchestrator/interfaces/web/main.py` passed.
 
+## 2026-06-01 Docker Template Stdlib Check
+
+- Docker task templates now default to `python -m unittest -q` so the recommended `python:3.12-slim` sandbox can run hard checks without installing pytest.
+- The generated default smoke worktree now writes `test_calculator.py` as a standard-library `unittest` test while preserving the same calculator patch scenario.
+- The default smoke worktree is still reset only for `.tmp/omx-unified-diff-smoke`, so user-provided worktrees are not overwritten.
+
 ## 2026-05-27 Task Management Navigation
 
 - Web UI now has a top navigation menu with `新建任务` and `任务管理`.
