@@ -258,3 +258,13 @@
 - 2026-05-27 Web UI Task Management Navigation：已完成。新增顶部菜单和 `/tasks` 任务管理页，支持按全部、运行中、已完成、失败筛选 persisted Web Jobs；重复点击模板直接运行时会打开已有任务并显示说明。验证：`python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` 通过，`43 passed`。
 - 2026-05-27 Web UI Task Management Workspace：已完成。`/tasks` 改为左侧菜单工作台布局，任务列表上方提供 `新建任务` 按钮，点击后弹出表单并复用 `/tasks/run` 提交流程。验证：`python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` 通过，`44 passed`。
 - 2026-05-27 Web UI Task List Table：已完成。`/tasks` 任务列表改为真实表格，列为状态、Job ID、Run ID、模板、执行、更新时间、操作，并保留窄屏横向滚动。验证：`python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` 通过，`44 passed`。
+
+# 2026-06-02 真实演示验收与对外文档收口
+
+- 状态：已完成。
+- 真实演示：使用受控 Web 服务 `http://127.0.0.1:8766` 提交 `Docker OMX Team Patch` 推荐模板，Job `job-20260602-100617-498307`、Run `run-20260602-100617-650766` 跑通到 `done`。
+- 质量证据：Docker `python:3.12-slim`、`network=none`、`worktree_mount=readonly`；hard check `python -m unittest -q` 通过；Review `pass=true`、`confidence=91`；Quality Gate `quality_score=100`、`decision=done`。
+- 页面证据：任务管理页可看到已完成 Job 和重新运行入口；Run 详情页可看到运行成功、执行摘要、阶段时间线、运行产物、Docker 执行证据、执行链路和 Team Result。
+- 文档产物：新增 `docs/codex/v1/plans/demo-readiness.md`，README 已补齐常用链接、目录、阅读路径、Web 页面入口、演示前检查清单、最近真实演示摘要、Mermaid 架构图和自动循环流程图。
+- 当前验证基线：`python -m pytest -q tests/test_web_ui.py` 为 `48 passed`；`python -m pytest -q` 为 `133 passed`。
+- 当前结论：Evoloop 本地真实演示链路可用，可用于对外演讲和技术评审；后续建议围绕演示稳定性、UI 细节和真实 Codex/OMX 环境依赖继续增强。
