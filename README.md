@@ -14,7 +14,15 @@ Evoloop 是一个自动循环进化编码智能体系统原型。它把任务提
 - Agent 协议：[docs/codex/v1/designs/自动循环进化编码智能体系统-agent-protocol.md](docs/codex/v1/designs/自动循环进化编码智能体系统-agent-protocol.md)
 - Docker 沙箱设计：[docs/codex/v1/designs/docker-sandbox-runner-design.md](docs/codex/v1/designs/docker-sandbox-runner-design.md)
 - Web UI 迭代记录：[docs/codex/v1/plans/web-ui-task-template-management.md](docs/codex/v1/plans/web-ui-task-template-management.md)
+- 演示脚本：[docs/codex/v1/plans/自动循环进化编码智能体系统-demo-script.md](docs/codex/v1/plans/自动循环进化编码智能体系统-demo-script.md)
 - 演讲大纲：[docs/codex/v1/presentation/自动循环进化编码智能体系统-演讲大纲.md](docs/codex/v1/presentation/自动循环进化编码智能体系统-演讲大纲.md)
+
+## 阅读路径
+
+- 想快速试用：先看[快速启动 Web UI](#快速启动-web-ui)，打开[任务管理页](http://127.0.0.1:8765/tasks?page=1&page_size=10)，选择 `Docker OMX Team Patch` 模板跑一个任务。
+- 想对外演示：先看[架构概览](#架构概览)和[自动循环流程](#自动循环流程)，再按[演示脚本](docs/codex/v1/plans/自动循环进化编码智能体系统-demo-script.md)准备讲解顺序。
+- 想评审方案：先看[V7 架构设计](docs/codex/v1/designs/自动循环进化编码智能体系统-v7.md)、[Agent 协议](docs/codex/v1/designs/自动循环进化编码智能体系统-agent-protocol.md)和[Docker 沙箱设计](docs/codex/v1/designs/docker-sandbox-runner-design.md)。
+- 想继续开发：从[核心代码入口](#核心代码入口)进入，再结合[Web UI 迭代记录](docs/codex/v1/plans/web-ui-task-template-management.md)确认最近改动。
 
 ## 当前能力
 
