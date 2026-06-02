@@ -10,6 +10,7 @@ Evoloop 是一个自动循环进化编码智能体系统原型。它把任务提
 - [阅读路径](#阅读路径)
 - [Web 页面入口](#web-页面入口)
 - [演示前检查清单](#演示前检查清单)
+- [最近真实演示](#最近真实演示)
 - [当前能力](#当前能力)
 - [架构概览](#架构概览)
 - [自动循环流程](#自动循环流程)
@@ -61,6 +62,19 @@ Evoloop 是一个自动循环进化编码智能体系统原型。它把任务提
 - 基线通过：`python -m pytest -q tests/test_web_ui.py` 和 `python -m pytest -q` 均通过。
 - 演示路径清楚：提交任务后先看 Job 状态页，再进入 Run 详情页讲执行摘要、时间线、运行产物、Docker 证据和补丁审批。
 - 失败预案：如果真实 agent 或 Docker 环境波动，切换到 `Mock Flow Demo` 讲 Orchestrator 状态流转，或使用历史 Run 详情页讲审计能力。
+
+## 最近真实演示
+
+2026-06-02 已完成一轮真实 Web UI + Docker 演示验收，推荐模板 `Docker OMX Team Patch` 跑通到 `done`。
+
+| 项目 | 值 |
+| :--- | :--- |
+| Job ID | `job-20260602-100617-498307` |
+| Run ID | `run-20260602-100617-650766` |
+| Quality Gate | `quality_score=100`, `decision=done` |
+| Docker 证据 | `python:3.12-slim`, `network=none`, `worktree_mount=readonly` |
+
+完整记录见：[docs/codex/v1/plans/demo-readiness.md](docs/codex/v1/plans/demo-readiness.md)。
 
 ## 当前能力
 
