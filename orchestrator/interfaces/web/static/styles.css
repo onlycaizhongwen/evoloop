@@ -714,6 +714,26 @@ button.danger {
   color: #6554a8;
 }
 
+.status-pill.severity-blocker {
+  background: #ffecec;
+  color: #8f2f2f;
+}
+
+.status-pill.severity-major {
+  background: #fff4df;
+  color: #9a5a13;
+}
+
+.status-pill.severity-minor {
+  background: #eef6ff;
+  color: #3a6ea5;
+}
+
+.status-pill.severity-unknown {
+  background: #eef1f4;
+  color: var(--muted);
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;

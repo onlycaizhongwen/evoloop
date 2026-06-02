@@ -374,6 +374,69 @@ def test_run_detail_shows_task_template_context(monkeypatch, tmp_path: Path):
     )
     (run_dir / "final_report.md").write_text("done", encoding="utf-8")
     (run_dir / "logs" / "phase.log").write_text("phase=done event=end\n", encoding="utf-8")
+    attempt_dir = run_dir / "attempts" / "001"
+    attempt_dir.mkdir(parents=True)
+    (attempt_dir / "hard_checks.json").write_text(
+        json.dumps(
+            {
+                "commands": [
+                    {
+                        "name": "test",
+                        "command": "python -m unittest -q",
+                        "passed": True,
+                        "exit_code": 0,
+                        "duration_seconds": 1.2,
+                        "score": 40,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    (attempt_dir / "review.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "task_id": "task-template-context",
+                "pass": True,
+                "confidence": 91,
+                "summary": "review ok",
+                "issues": [
+                    {
+                        "id": "ISSUE-1",
+                        "severity": "major",
+                        "category": "test",
+                        "file": "calculator.py",
+                        "line": 3,
+                        "message": "missing edge case assertion",
+                        "suggestion": "add zero input coverage",
+                    }
+                ],
+                "blocking": False,
+                "recommended_next_action": "pass",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (attempt_dir / "quality_report.json").write_text(
+        json.dumps(
+            {
+                "task_id": "task-template-context",
+                "attempt": 1,
+                "change_type": "bugfix",
+                "hard_check_score": 40,
+                "review_pass": True,
+                "review_confidence": 91,
+                "review_score": 30,
+                "diff_risk_score": 10,
+                "quality_score": 100,
+                "passed": True,
+                "decision": "done",
+                "reason": "quality gate passed",
+            }
+        ),
+        encoding="utf-8",
+    )
     patch_plan = PatchPlan(
         task_id="task-template-context",
         summary="fix calculator",
@@ -396,6 +459,19 @@ def test_run_detail_shows_task_template_context(monkeypatch, tmp_path: Path):
     assert "task-template-context / run-template-context" in response.text
     assert "docker / omx_team_patch" in response.text
     assert "启动配置" in response.text
+    assert "验证证据" in response.text
+    assert "Hard Checks / Review / Quality Gate" in response.text
+    assert 'id="validation-evidence"' in response.text
+    assert "passed / test:passed:exit=0" in response.text
+    assert "pass=True / confidence=91 / blocking=False / review ok" in response.text
+    assert "decision=done / score=100 / passed=True / quality gate passed" in response.text
+    assert "<td>test</td>" in response.text
+    assert "<td>python -m unittest -q</td>" in response.text
+    assert "<td>40</td>" in response.text
+    assert '<span class="status-pill severity-major">major</span>' in response.text
+    assert "<td>calculator.py:3</td>" in response.text
+    assert "missing edge case assertion" in response.text
+    assert "add zero input coverage" in response.text
     assert "执行链路" in response.text
     assert "本次运行由 docker / omx_team_patch 执行" in response.text
     assert "OMX Team 编排" in response.text
@@ -471,7 +547,17 @@ def test_run_audit_markdown_exports_shareable_summary(monkeypatch, tmp_path: Pat
                 "pass": True,
                 "confidence": 91,
                 "summary": "review ok",
-                "issues": [],
+                "issues": [
+                    {
+                        "id": "AUDIT-1",
+                        "severity": "major",
+                        "category": "test",
+                        "file": "calculator.py",
+                        "line": 5,
+                        "message": "missing negative input case",
+                        "suggestion": "add negative input coverage",
+                    }
+                ],
                 "blocking": False,
                 "recommended_next_action": "pass",
             }
@@ -526,6 +612,8 @@ def test_run_audit_markdown_exports_shareable_summary(monkeypatch, tmp_path: Pat
     assert "- Hard Checks: passed / test:passed:exit=0" in response.text
     assert "- Review: pass=True / confidence=91 / blocking=False / review ok" in response.text
     assert "- Quality Report: decision=done / score=100 / passed=True / quality gate passed" in response.text
+    assert "## Review Issues" in response.text
+    assert "major / test / calculator.py:5 / missing negative input case / suggestion=add negative input coverage" in response.text
     assert "- Changed Files: calculator.py" in response.text
     assert "001-patch_coder.json" in response.text
     assert "Quality Gate passed" in response.text
@@ -701,6 +789,45 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
             "run_id": "run-failed-template",
         }
     )
+    done_attempt_dir = tmp_path / ".omx" / "runs" / "run-done-template" / "attempts" / "001"
+    done_attempt_dir.mkdir(parents=True)
+    (done_attempt_dir / "quality_report.json").write_text(
+        json.dumps({"quality_score": 100, "decision": "done", "passed": True, "reason": "quality gate passed"}),
+        encoding="utf-8",
+    )
+    (done_attempt_dir / "review.json").write_text(
+        json.dumps(
+            {
+                "pass": True,
+                "confidence": 92,
+                "summary": "review ok",
+                "issues": [{"severity": "minor", "file": "smoke.py", "line": 9, "message": "prefer explicit smoke coverage"}],
+                "blocking": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    failed_attempt_dir = tmp_path / ".omx" / "runs" / "run-failed-template" / "attempts" / "001"
+    failed_attempt_dir.mkdir(parents=True)
+    (failed_attempt_dir / "quality_report.json").write_text(
+        json.dumps({"quality_score": 62, "decision": "halt", "passed": False, "reason": "quality score below threshold"}),
+        encoding="utf-8",
+    )
+    (failed_attempt_dir / "review.json").write_text(
+        json.dumps(
+            {
+                "pass": False,
+                "confidence": 71,
+                "summary": "review found blockers",
+                "issues": [
+                    {"severity": "major", "file": "deploy.py", "line": 12, "message": "missing rollback path"},
+                    {"severity": "major", "message": "missing retry coverage"},
+                ],
+                "blocking": True,
+            }
+        ),
+        encoding="utf-8",
+    )
 
     response = TestClient(app).get("/tasks")
 
@@ -720,24 +847,42 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert "<th>Run ID</th>" in response.text
     assert "<th>模板</th>" in response.text
     assert "<th>执行</th>" in response.text
+    assert "<th>质量</th>" in response.text
+    assert 'name="quality"' in response.text
+    assert '<option value="all" selected>All (3)</option>' in response.text
+    assert '<option value="passed" >Passed (1)</option>' in response.text
+    assert '<option value="failed" >Failed (1)</option>' in response.text
+    assert '<option value="missing" >Missing (1)</option>' in response.text
     assert response.text.index("<th>任务名称</th>") < response.text.index("<th>Job ID</th>")
     assert response.text.index("<th>更新时间</th>") < response.text.index("<th>状态</th>")
+    assert response.text.index("<th>状态</th>") < response.text.index("<th>质量</th>")
     assert '<span class="status-pill running">运行中</span>' in response.text
     assert '<span class="status-pill done">已完成</span>' in response.text
     assert '<span class="status-pill failed">失败</span>' in response.text
+    assert '<span class="status-pill done">100 / done</span>' in response.text
+    assert '<span class="status-pill failed">62 / halt</span>' in response.text
+    assert "quality gate passed" in response.text
+    assert "quality score below threshold" in response.text
+    assert "等待 run_id" in response.text
+    assert "Review issues: 1" in response.text
+    assert "Review issues: 2" in response.text
+    assert "First issue: smoke.py:9 / minor: prefer explicit smoke coverage" in response.text
+    assert "First issue: deploy.py:12 / major: missing rollback path" in response.text
     assert "运行中模板任务" in response.text
     assert "已完成模板任务" in response.text
     assert 'href="/jobs/job-running-template"' in response.text
     assert 'href="/runs/run-done-template"' in response.text
     assert 'href="/jobs/job-failed-template"' in response.text
     assert 'href="/runs/run-failed-template">运行详情</a>' in response.text
+    assert 'href="/runs/run-done-template#validation-evidence">验证证据</a>' in response.text
+    assert 'href="/runs/run-failed-template#validation-evidence">验证证据</a>' in response.text
     assert 'href="/runs/run-done-template/audit.md">审计摘要</a>' in response.text
     assert 'href="/runs/run-failed-template/audit.md">审计摘要</a>' in response.text
     assert 'href="/runs//audit.md"' not in response.text
-    assert 'action="/tasks/job-running-template/stop?status=all&amp;page=1&amp;page_size=10&amp;q="' in response.text
+    assert 'action="/tasks/job-running-template/stop?status=all&amp;quality=all&amp;page=1&amp;page_size=10&amp;q="' in response.text
     assert 'action="/jobs/job-running-template/rerun"' not in response.text
     assert 'action="/jobs/job-done-template/rerun"' in response.text
-    assert 'action="/tasks/job-running-template/delete?status=all&amp;page=1&amp;page_size=10&amp;q="' in response.text
+    assert 'action="/tasks/job-running-template/delete?status=all&amp;quality=all&amp;page=1&amp;page_size=10&amp;q="' in response.text
     assert "停止" in response.text
     assert "重新运行" in response.text
     assert "删除" in response.text
@@ -772,6 +917,10 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert "job-done-template" not in filtered.text
     assert '<meta http-equiv="refresh" content="5">' in filtered.text
     assert "运行中列表会自动刷新" in filtered.text
+    assert "All (1)" in filtered.text
+    assert "Passed (0)" in filtered.text
+    assert "Failed (0)" in filtered.text
+    assert "Missing (1)" in filtered.text
 
     stopped = TestClient(app).get("/tasks?status=stopped")
 
@@ -787,6 +936,50 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert 'value="已完成模板任务"' in searched.text
     assert 'href="/tasks?status=running' in searched.text
     assert "&amp;q=" in searched.text
+
+    searched_quality_reason = TestClient(app).get("/tasks?q=quality+gate+passed")
+
+    assert searched_quality_reason.status_code == 200
+    assert "job-done-template" in searched_quality_reason.text
+    assert "job-failed-template" not in searched_quality_reason.text
+
+    searched_quality_decision = TestClient(app).get("/tasks?q=62+%2F+halt")
+
+    assert searched_quality_decision.status_code == 200
+    assert "job-failed-template" in searched_quality_decision.text
+    assert "job-done-template" not in searched_quality_decision.text
+
+    searched_review_issue_count = TestClient(app).get("/tasks?q=Review+issues%3A+2")
+
+    assert searched_review_issue_count.status_code == 200
+    assert "job-failed-template" in searched_review_issue_count.text
+    assert "job-done-template" not in searched_review_issue_count.text
+
+    searched_review_issue_summary = TestClient(app).get("/tasks?q=missing+rollback+path")
+
+    assert searched_review_issue_summary.status_code == 200
+    assert "job-failed-template" in searched_review_issue_summary.text
+    assert "job-done-template" not in searched_review_issue_summary.text
+
+    filtered_quality_passed = TestClient(app).get("/tasks?quality=passed")
+
+    assert filtered_quality_passed.status_code == 200
+    assert "job-done-template" in filtered_quality_passed.text
+    assert "job-failed-template" not in filtered_quality_passed.text
+    assert "job-running-template" not in filtered_quality_passed.text
+    assert '<option value="passed" selected>Passed (1)</option>' in filtered_quality_passed.text
+
+    filtered_quality_failed = TestClient(app).get("/tasks?quality=failed")
+
+    assert filtered_quality_failed.status_code == 200
+    assert "job-failed-template" in filtered_quality_failed.text
+    assert "job-done-template" not in filtered_quality_failed.text
+
+    filtered_quality_missing = TestClient(app).get("/tasks?quality=missing")
+
+    assert filtered_quality_missing.status_code == 200
+    assert "job-running-template" in filtered_quality_missing.text
+    assert "job-done-template" not in filtered_quality_missing.text
 
 
 def test_task_manager_paginates_jobs(monkeypatch, tmp_path: Path):
@@ -816,8 +1009,8 @@ def test_task_manager_paginates_jobs(monkeypatch, tmp_path: Path):
 
     assert response.status_code == 200
     assert "共 12 条，第 2 / 3 页" in response.text
-    assert 'href="/tasks?status=failed&amp;page=1&amp;page_size=5&amp;q="' in response.text
-    assert 'href="/tasks?status=failed&amp;page=3&amp;page_size=5&amp;q="' in response.text
+    assert 'href="/tasks?status=failed&amp;quality=all&amp;page=1&amp;page_size=5&amp;q="' in response.text
+    assert 'href="/tasks?status=failed&amp;quality=all&amp;page=3&amp;page_size=5&amp;q="' in response.text
     assert "job-page-06" in response.text
     assert "job-page-05" in response.text
     assert "job-page-11" not in response.text
@@ -846,12 +1039,12 @@ def test_task_manager_stops_and_deletes_jobs(monkeypatch, tmp_path: Path):
     client = TestClient(app)
 
     stop_response = client.post(
-        "/tasks/job-stop-delete/stop?status=running&page=1&page_size=10&q=运行中 任务",
+        "/tasks/job-stop-delete/stop?status=running&quality=missing&page=1&page_size=10&q=运行中 任务",
         follow_redirects=False,
     )
 
     assert stop_response.status_code == 303
-    assert stop_response.headers["location"] == "/tasks?status=running&page=1&page_size=10&q=%E8%BF%90%E8%A1%8C%E4%B8%AD+%E4%BB%BB%E5%8A%A1"
+    assert stop_response.headers["location"] == "/tasks?status=running&quality=missing&page=1&page_size=10&q=%E8%BF%90%E8%A1%8C%E4%B8%AD+%E4%BB%BB%E5%8A%A1"
     stopped = repository.get("job-stop-delete")
     assert stopped is not None
     assert stopped["status"] == "stopped"
@@ -863,19 +1056,19 @@ def test_task_manager_stops_and_deletes_jobs(monkeypatch, tmp_path: Path):
     assert "已提交停止请求" in stopped_detail.text
 
     delete_response = client.post(
-        "/tasks/job-stop-delete/delete?status=all&page=1&page_size=10&q=运行中 任务",
+        "/tasks/job-stop-delete/delete?status=all&quality=missing&page=1&page_size=10&q=运行中 任务",
         follow_redirects=False,
     )
 
     assert delete_response.status_code == 303
-    assert delete_response.headers["location"] == "/tasks?status=all&page=1&page_size=10&q=%E8%BF%90%E8%A1%8C%E4%B8%AD+%E4%BB%BB%E5%8A%A1"
+    assert delete_response.headers["location"] == "/tasks?status=all&quality=missing&page=1&page_size=10&q=%E8%BF%90%E8%A1%8C%E4%B8%AD+%E4%BB%BB%E5%8A%A1"
     assert repository.get("job-stop-delete") is None
 
 
 def test_task_manager_url_preserves_query():
-    url = _tasks_url(status="running", page=2, page_size=20, q="abc def")
+    url = _tasks_url(status="running", quality="failed", page=2, page_size=20, q="abc def")
 
-    assert url == "/tasks?status=running&page=2&page_size=20&q=abc+def"
+    assert url == "/tasks?status=running&quality=failed&page=2&page_size=20&q=abc+def"
 
 
 def test_task_manager_tolerates_legacy_job_without_task_path(monkeypatch, tmp_path: Path):
@@ -1015,6 +1208,7 @@ def test_web_static_styles_available():
 
     assert response.status_code == 200
     assert ".shell" in response.text
+    assert ".status-pill.severity-major" in response.text
 
 
 def test_web_index_exposes_omx_team_patch_mode(monkeypatch, tmp_path: Path):

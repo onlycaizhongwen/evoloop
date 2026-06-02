@@ -277,11 +277,21 @@ def job_status(request: Request, job_id: str, reused: str = "", rerun_error: str
 
 
 @app.get("/tasks", response_class=HTMLResponse)
-def task_manager(request: Request, status: str = "all", page: int = 1, page_size: int = 10, q: str = ""):
+def task_manager(
+    request: Request,
+    status: str = "all",
+    quality: str = "all",
+    page: int = 1,
+    page_size: int = 10,
+    q: str = "",
+):
     normalized_status = status if status in {"all", "running", "done", "failed", "stopped"} else "all"
+    normalized_quality = quality if quality in {"all", "passed", "failed", "missing"} else "all"
     normalized_page_size = min(max(page_size, 5), 50)
     query = q.strip()
-    filtered_jobs = _filter_task_manager_jobs(normalized_status, query)
+    status_jobs = _load_task_manager_jobs(normalized_status)
+    quality_counts = _count_task_manager_quality(status_jobs)
+    filtered_jobs = _filter_task_manager_jobs(status_jobs, normalized_quality, query)
     total = len(filtered_jobs)
     total_pages = max(1, (total + normalized_page_size - 1) // normalized_page_size)
     current_page = min(max(page, 1), total_pages)
@@ -293,10 +303,24 @@ def task_manager(request: Request, status: str = "all", page: int = 1, page_size
         {
             "jobs": enriched_jobs,
             "active_status": normalized_status,
+            "active_quality": normalized_quality,
             "query": query,
-            "task_query": _tasks_query(status=normalized_status, page=current_page, page_size=normalized_page_size, q=query),
-            "task_query_first_page": _tasks_query(status=normalized_status, page=1, page_size=normalized_page_size, q=query),
+            "task_query": _tasks_query(
+                status=normalized_status,
+                quality=normalized_quality,
+                page=current_page,
+                page_size=normalized_page_size,
+                q=query,
+            ),
+            "task_query_first_page": _tasks_query(
+                status=normalized_status,
+                quality=normalized_quality,
+                page=1,
+                page_size=normalized_page_size,
+                q=query,
+            ),
             "counts": _count_jobs_by_status(),
+            "quality_counts": quality_counts,
             "pagination": {
                 "page": current_page,
                 "page_size": normalized_page_size,
@@ -308,12 +332,14 @@ def task_manager(request: Request, status: str = "all", page: int = 1, page_size
                 "next_page": min(total_pages, current_page + 1),
                 "previous_query": _tasks_query(
                     status=normalized_status,
+                    quality=normalized_quality,
                     page=max(1, current_page - 1),
                     page_size=normalized_page_size,
                     q=query,
                 ),
                 "next_query": _tasks_query(
                     status=normalized_status,
+                    quality=normalized_quality,
                     page=min(total_pages, current_page + 1),
                     page_size=normalized_page_size,
                     q=query,
@@ -328,7 +354,14 @@ def task_manager(request: Request, status: str = "all", page: int = 1, page_size
 
 
 @app.post("/tasks/{job_id}/stop")
-def stop_task(job_id: str, status: str = "all", page: int = 1, page_size: int = 10, q: str = ""):
+def stop_task(
+    job_id: str,
+    status: str = "all",
+    quality: str = "all",
+    page: int = 1,
+    page_size: int = 10,
+    q: str = "",
+):
     safe_job_id = _safe_id(job_id)
     job = _read_job(safe_job_id)
     if job and str(job.get("status") or "") == "running":
@@ -343,13 +376,26 @@ def stop_task(job_id: str, status: str = "all", page: int = 1, page_size: int = 
             ),
             finished_at=datetime.now().isoformat(),
         )
-    return RedirectResponse(url=_tasks_url(status=status, page=page, page_size=page_size, q=q), status_code=303)
+    return RedirectResponse(
+        url=_tasks_url(status=status, quality=quality, page=page, page_size=page_size, q=q),
+        status_code=303,
+    )
 
 
 @app.post("/tasks/{job_id}/delete")
-def delete_task(job_id: str, status: str = "all", page: int = 1, page_size: int = 10, q: str = ""):
+def delete_task(
+    job_id: str,
+    status: str = "all",
+    quality: str = "all",
+    page: int = 1,
+    page_size: int = 10,
+    q: str = "",
+):
     _job_repository().delete(_safe_id(job_id))
-    return RedirectResponse(url=_tasks_url(status=status, page=page, page_size=page_size, q=q), status_code=303)
+    return RedirectResponse(
+        url=_tasks_url(status=status, quality=quality, page=page, page_size=page_size, q=q),
+        status_code=303,
+    )
 
 
 @app.get("/runs/{run_id}", response_class=HTMLResponse)
@@ -363,6 +409,7 @@ def run_detail(request: Request, run_id: str):
     phase_log = _read_optional(run_dir / "logs" / "phase.log")
     docker_evidence = _load_docker_evidence(run_dir)
     phase_timeline = _parse_phase_timeline(phase_log)
+    validation_evidence = _load_validation_evidence(run_dir, state.attempt)
     return TEMPLATES.TemplateResponse(
         request,
         "run_detail.html",
@@ -389,6 +436,7 @@ def run_detail(request: Request, run_id: str):
             "agent_log": _read_optional(run_dir / "logs" / "agent.log"),
             "phase_log": phase_log,
             "phase_timeline": phase_timeline,
+            "validation_evidence": validation_evidence,
             "docker_evidence": docker_evidence,
             "team_result": _read_first_optional(run_dir.glob("attempts/*/team_result.json")),
             "team_diagnostics": _read_first_optional(run_dir.glob("attempts/*/team_diagnostics.json")),
@@ -776,14 +824,44 @@ def _load_jobs_page(*, status: str, limit: int, offset: int) -> list[dict[str, A
     return [_reconcile_job(job) for job in _job_repository().list_page(limit=limit, offset=offset, status=status_filter)]
 
 
-def _filter_task_manager_jobs(status: str, query: str) -> list[dict[str, str]]:
+def _load_task_manager_jobs(status: str) -> list[dict[str, str]]:
     status_filter = None if status == "all" else status
     raw_jobs = [_reconcile_job(job) for job in _job_repository().list_page(limit=500, offset=0, status=status_filter)]
-    jobs = [_build_task_manager_job(job) for job in raw_jobs]
+    return [_build_task_manager_job(job) for job in raw_jobs]
+
+
+def _count_task_manager_quality(jobs: list[dict[str, str]]) -> dict[str, int]:
+    counts = {"all": len(jobs), "passed": 0, "failed": 0, "missing": 0}
+    for job in jobs:
+        quality_class = job.get("quality_class", "")
+        if quality_class == "done":
+            counts["passed"] += 1
+        elif quality_class == "failed":
+            counts["failed"] += 1
+        else:
+            counts["missing"] += 1
+    return counts
+
+
+def _filter_task_manager_jobs(jobs: list[dict[str, str]], quality: str, query: str) -> list[dict[str, str]]:
+    jobs = [job for job in jobs if _task_manager_quality_matches(job, quality)]
     if not query:
         return jobs
     needle = query.lower()
     return [job for job in jobs if _task_manager_job_matches(job, needle)]
+
+
+def _task_manager_quality_matches(job: dict[str, str], quality: str) -> bool:
+    if quality == "all":
+        return True
+    quality_class = job.get("quality_class", "")
+    if quality == "missing":
+        return quality_class == "unknown"
+    if quality == "passed":
+        return quality_class == "done"
+    if quality == "failed":
+        return quality_class == "failed"
+    return True
 
 
 def _task_manager_job_matches(job: dict[str, str], needle: str) -> bool:
@@ -797,6 +875,10 @@ def _task_manager_job_matches(job: dict[str, str], needle: str) -> bool:
             job.get("template_id", ""),
             job.get("execution_backend", ""),
             job.get("agent_mode", ""),
+            job.get("quality_label", ""),
+            job.get("quality_reason", ""),
+            job.get("review_issue_label", ""),
+            job.get("review_issue_summary", ""),
             job.get("status", ""),
         ]
     ).lower()
@@ -823,6 +905,9 @@ def _build_task_manager_job(job: dict[str, Any]) -> dict[str, str]:
     run_id = str(job.get("run_id") or "")
     status = str(job.get("status") or "unknown")
     task_context = _load_job_task_context(job, run_id)
+    quality_summary = _load_task_manager_quality_summary(run_id)
+    review_issue_label = f"Review issues: {_count_review_issues(run_id)}" if run_id else "Review issues: 0"
+    review_issue_summary = _first_review_issue_summary(run_id)
     return {
         "job_id": job_id,
         "task_name": task_context.get("title") or task_context.get("task_id") or job_id,
@@ -838,10 +923,68 @@ def _build_task_manager_job(job: dict[str, Any]) -> dict[str, str]:
         "template_id": task_context.get("template_id") or "",
         "execution_backend": task_context.get("execution_backend") or "旧任务未记录",
         "agent_mode": task_context.get("agent_mode") or "",
+        "quality_label": quality_summary["label"],
+        "quality_reason": quality_summary["reason"],
+        "quality_class": quality_summary["css_class"],
+        "review_issue_label": review_issue_label,
+        "review_issue_summary": review_issue_summary,
         "detail_url": f"/runs/{run_id}" if status == "done" and run_id else f"/jobs/{job_id}",
         "run_detail_url": f"/runs/{run_id}" if run_id else "",
+        "evidence_url": f"/runs/{run_id}#validation-evidence" if run_id else "",
         "can_stop": "1" if status == "running" else "",
         "can_rerun": "1" if status != "running" else "",
+    }
+
+
+def _count_review_issues(run_id: str) -> int:
+    if not run_id:
+        return 0
+    review = _read_first_json_optional((RUNS_DIR / run_id).glob("attempts/*/review.json"))
+    issues = review.get("issues") if review else None
+    return len(issues) if isinstance(issues, list) else 0
+
+
+def _first_review_issue_summary(run_id: str) -> str:
+    if not run_id:
+        return ""
+    review = _read_first_json_optional((RUNS_DIR / run_id).glob("attempts/*/review.json"))
+    issues = review.get("issues") if review else None
+    if not isinstance(issues, list):
+        return ""
+    for issue in issues:
+        if not isinstance(issue, dict):
+            continue
+        severity = str(issue.get("severity") or "unknown")
+        message = str(issue.get("message") or "").strip()
+        location = _review_issue_location(issue)
+        if not message and location == "-":
+            continue
+        issue_label = f"{severity}: {message}" if message else severity
+        return f"First issue: {location} / {issue_label}"
+    return ""
+
+
+def _review_issue_location(issue: dict[str, object]) -> str:
+    location_parts = [str(issue.get("file") or "")]
+    if issue.get("line") not in (None, ""):
+        location_parts.append(str(issue.get("line")))
+    return ":".join(part for part in location_parts if part) or "-"
+
+
+def _load_task_manager_quality_summary(run_id: str) -> dict[str, str]:
+    if not run_id:
+        return {"label": "未记录", "reason": "等待 run_id", "css_class": "unknown"}
+    report = _read_first_json_optional((RUNS_DIR / run_id).glob("attempts/*/quality_report.json"))
+    if not report:
+        return {"label": "未记录", "reason": "未找到 quality_report.json", "css_class": "unknown"}
+    score = report.get("quality_score", "unknown")
+    decision = str(report.get("decision") or "unknown")
+    passed = bool(report.get("passed"))
+    reason = str(report.get("reason") or "未记录")
+    return {
+        "label": f"{score} / {decision}",
+        "reason": reason,
+        "css_class": "done" if passed or decision == "done" else "failed",
     }
 
 
@@ -1098,21 +1241,26 @@ def _load_validation_evidence(run_dir: Path, attempt: int) -> dict[str, object]:
     hard_checks = _read_json_optional(attempt_dir / "hard_checks.json")
     review = _read_json_optional(attempt_dir / "review.json")
     quality_report = _read_json_optional(attempt_dir / "quality_report.json")
+    hard_check_label, hard_check_rows = _format_hard_check_evidence(hard_checks)
+    review_label, review_issue_rows = _format_review_evidence(review)
     return {
-        "hard_checks": _format_hard_check_evidence(hard_checks),
-        "review": _format_review_evidence(review),
+        "hard_checks": hard_check_label,
+        "hard_check_rows": hard_check_rows,
+        "review": review_label,
+        "review_issue_rows": review_issue_rows,
         "quality_report": _format_quality_report_evidence(quality_report),
     }
 
 
-def _format_hard_check_evidence(payload: dict[str, object] | None) -> str:
+def _format_hard_check_evidence(payload: dict[str, object] | None) -> tuple[str, list[dict[str, str]]]:
     if not payload:
-        return "not recorded"
+        return "not recorded", []
     commands = payload.get("commands")
     if not isinstance(commands, list) or not commands:
-        return "not recorded"
+        return "not recorded", []
     passed = all(bool(command.get("passed")) for command in commands if isinstance(command, dict))
     command_labels = []
+    rows: list[dict[str, str]] = []
     for command in commands:
         if not isinstance(command, dict):
             continue
@@ -1120,17 +1268,57 @@ def _format_hard_check_evidence(payload: dict[str, object] | None) -> str:
         status = "passed" if command.get("passed") else "failed"
         exit_code = command.get("exit_code", "")
         command_labels.append(f"{name}:{status}:exit={exit_code}")
-    return f"{'passed' if passed else 'failed'} / " + ", ".join(command_labels)
+        rows.append(
+            {
+                "name": name,
+                "status": status,
+                "command": str(command.get("command") or ""),
+                "exit_code": str(exit_code),
+                "duration": str(command.get("duration_seconds") or "0"),
+                "score": str(command.get("score") or "0"),
+            }
+        )
+    return f"{'passed' if passed else 'failed'} / " + ", ".join(command_labels), rows
 
 
-def _format_review_evidence(payload: dict[str, object] | None) -> str:
+def _format_review_evidence(payload: dict[str, object] | None) -> tuple[str, list[dict[str, str]]]:
     if not payload:
-        return "not recorded"
+        return "not recorded", []
     passed = payload.get("pass", payload.get("pass_"))
     confidence = payload.get("confidence", "unknown")
     summary = str(payload.get("summary") or "").strip() or "no summary"
     blocking = payload.get("blocking", "unknown")
-    return f"pass={passed} / confidence={confidence} / blocking={blocking} / {summary}"
+    issue_rows: list[dict[str, str]] = []
+    issues = payload.get("issues")
+    if isinstance(issues, list):
+        for issue in issues:
+            if not isinstance(issue, dict):
+                continue
+            location_parts = [str(issue.get("file") or "")]
+            if issue.get("line") not in (None, ""):
+                location_parts.append(str(issue.get("line")))
+            issue_rows.append(
+                {
+                    "severity": str(issue.get("severity") or ""),
+                    "severity_class": _review_issue_severity_class(issue.get("severity")),
+                    "category": str(issue.get("category") or ""),
+                    "location": ":".join(part for part in location_parts if part) or "-",
+                    "message": str(issue.get("message") or ""),
+                    "suggestion": str(issue.get("suggestion") or ""),
+                }
+            )
+    return f"pass={passed} / confidence={confidence} / blocking={blocking} / {summary}", issue_rows
+
+
+def _review_issue_severity_class(severity: object) -> str:
+    normalized = str(severity or "").strip().lower()
+    if normalized in {"blocker", "critical"}:
+        return "severity-blocker"
+    if normalized in {"major", "high"}:
+        return "severity-major"
+    if normalized in {"minor", "medium", "low"}:
+        return "severity-minor"
+    return "severity-unknown"
 
 
 def _format_quality_report_evidence(payload: dict[str, object] | None) -> str:
@@ -1187,6 +1375,22 @@ def _build_run_audit_markdown(
         "",
         "## Docker Evidence",
     ]
+    review_issue_rows = validation_evidence.get("review_issue_rows")
+    if isinstance(review_issue_rows, list) and review_issue_rows:
+        lines.extend(["## Review Issues"])
+        for issue in review_issue_rows:
+            if not isinstance(issue, dict):
+                continue
+            lines.append(
+                "- "
+                f"{issue.get('severity') or 'unknown'} / "
+                f"{issue.get('category') or 'unknown'} / "
+                f"{issue.get('location') or '-'} / "
+                f"{issue.get('message') or ''}"
+                + (f" / suggestion={issue.get('suggestion')}" if issue.get("suggestion") else "")
+            )
+        lines.append("")
+
     if docker_evidence.get("enabled"):
         lines.extend(
             [
@@ -1371,13 +1575,15 @@ def _count_jobs_by_status() -> dict[str, int]:
     return _job_repository().counts_by_status()
 
 
-def _tasks_query(*, status: str, page: int, page_size: int, q: str = "") -> str:
+def _tasks_query(*, status: str, page: int, page_size: int, q: str = "", quality: str = "all") -> str:
     normalized_status = status if status in {"all", "running", "done", "failed", "stopped"} else "all"
+    normalized_quality = quality if quality in {"all", "passed", "failed", "missing"} else "all"
     normalized_page = max(page, 1)
     normalized_page_size = min(max(page_size, 5), 50)
     return urlencode(
         {
             "status": normalized_status,
+            "quality": normalized_quality,
             "page": normalized_page,
             "page_size": normalized_page_size,
             "q": q.strip(),
@@ -1385,8 +1591,8 @@ def _tasks_query(*, status: str, page: int, page_size: int, q: str = "") -> str:
     )
 
 
-def _tasks_url(*, status: str, page: int, page_size: int, q: str = "") -> str:
-    return f"/tasks?{_tasks_query(status=status, page=page, page_size=page_size, q=q)}"
+def _tasks_url(*, status: str, page: int, page_size: int, q: str = "", quality: str = "all") -> str:
+    return f"/tasks?{_tasks_query(status=status, quality=quality, page=page, page_size=page_size, q=q)}"
 
 
 def _list_task_templates_with_recent_jobs(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1746,6 +1952,14 @@ def _read_json_optional(path: Path) -> dict[str, object] | None:
     except json.JSONDecodeError:
         return None
     return payload if isinstance(payload, dict) else None
+
+
+def _read_first_json_optional(paths: Iterable[Path]) -> dict[str, object] | None:
+    for path in sorted(paths, reverse=True):
+        payload = _read_json_optional(path)
+        if payload:
+            return payload
+    return None
 
 
 def _read_first_optional(paths: Iterable[Path]) -> str:

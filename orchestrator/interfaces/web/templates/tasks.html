@@ -28,23 +28,23 @@
       </header>
 
       <section class="summary-grid">
-        <a class="metric task-filter {% if active_status == 'all' %}active{% endif %}" href="/tasks?status=all&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
+        <a class="metric task-filter {% if active_status == 'all' %}active{% endif %}" href="/tasks?status=all&quality={{ active_quality }}&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
           <span>全部</span>
           <strong>{{ counts.all }}</strong>
         </a>
-        <a class="metric task-filter {% if active_status == 'running' %}active{% endif %}" href="/tasks?status=running&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
+        <a class="metric task-filter {% if active_status == 'running' %}active{% endif %}" href="/tasks?status=running&quality={{ active_quality }}&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
           <span>运行中</span>
           <strong>{{ counts.running }}</strong>
         </a>
-        <a class="metric task-filter {% if active_status == 'done' %}active{% endif %}" href="/tasks?status=done&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
+        <a class="metric task-filter {% if active_status == 'done' %}active{% endif %}" href="/tasks?status=done&quality={{ active_quality }}&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
           <span>已完成</span>
           <strong>{{ counts.done }}</strong>
         </a>
-        <a class="metric task-filter {% if active_status == 'failed' %}active{% endif %}" href="/tasks?status=failed&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
+        <a class="metric task-filter {% if active_status == 'failed' %}active{% endif %}" href="/tasks?status=failed&quality={{ active_quality }}&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
           <span>失败</span>
           <strong>{{ counts.failed }}</strong>
         </a>
-        <a class="metric task-filter {% if active_status == 'stopped' %}active{% endif %}" href="/tasks?status=stopped&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
+        <a class="metric task-filter {% if active_status == 'stopped' %}active{% endif %}" href="/tasks?status=stopped&quality={{ active_quality }}&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
           <span>已停止</span>
           <strong>{{ counts.stopped }}</strong>
         </a>
@@ -73,6 +73,14 @@
             <input name="q" value="{{ query }}" placeholder="任务名称、Task ID、Job ID、Run ID、模板">
           </label>
           <label>每页
+          <label>Quality
+            <select name="quality">
+              <option value="all" {% if active_quality == "all" %}selected{% endif %}>All ({{ quality_counts.all }})</option>
+              <option value="passed" {% if active_quality == "passed" %}selected{% endif %}>Passed ({{ quality_counts.passed }})</option>
+              <option value="failed" {% if active_quality == "failed" %}selected{% endif %}>Failed ({{ quality_counts.failed }})</option>
+              <option value="missing" {% if active_quality == "missing" %}selected{% endif %}>Missing ({{ quality_counts.missing }})</option>
+            </select>
+          </label>
             <select name="page_size">
               {% for option in [5, 10, 20, 50] %}
               <option value="{{ option }}" {% if pagination.page_size == option %}selected{% endif %}>{{ option }}</option>
@@ -82,7 +90,7 @@
           <input type="hidden" name="page" value="1">
           <div class="toolbar-actions">
             <button type="submit">查询</button>
-            <a class="button secondary" href="/tasks?status={{ active_status }}&page=1&page_size={{ pagination.page_size }}">清空</a>
+            <a class="button secondary" href="/tasks?status={{ active_status }}&quality=all&page=1&page_size={{ pagination.page_size }}">清空</a>
           </div>
         </form>
         <div class="task-table-wrap">
@@ -96,6 +104,7 @@
                 <th>执行</th>
                 <th>更新时间</th>
                 <th>状态</th>
+                <th>质量</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -119,12 +128,19 @@
                 <td>{{ job.updated_at or job.started_at }}</td>
                 <td><span class="status-pill {{ job.status_class }}">{{ job.status_label }}</span></td>
                 <td>
+                  <span class="status-pill {{ job.quality_class }}">{{ job.quality_label }}</span>
+                  <span class="muted-line">{{ job.quality_reason }}</span>
+                  <span class="muted-line">{{ job.review_issue_label }}</span>
+                  {% if job.review_issue_summary %}<span class="muted-line">{{ job.review_issue_summary }}</span>{% endif %}
+                </td>
+                <td>
                   <div class="table-actions">
                     <a class="button secondary" href="{{ job.detail_url }}">详情</a>
                     {% if job.run_detail_url and job.run_detail_url != job.detail_url %}
                     <a class="button secondary" href="{{ job.run_detail_url }}">运行详情</a>
                     {% endif %}
                     {% if job.run_id %}
+                    <a class="button secondary" href="{{ job.evidence_url }}">验证证据</a>
                     <a class="button secondary" href="/runs/{{ job.run_id }}/audit.md">审计摘要</a>
                     {% endif %}
                     {% if job.can_stop %}
@@ -145,7 +161,7 @@
               </tr>
               {% else %}
               <tr>
-                <td colspan="8" class="empty-cell">暂无任务记录。</td>
+                <td colspan="9" class="empty-cell">暂无任务记录。</td>
               </tr>
               {% endfor %}
             </tbody>
