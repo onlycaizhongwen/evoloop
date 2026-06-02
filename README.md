@@ -24,6 +24,16 @@ Evoloop 是一个自动循环进化编码智能体系统原型。它把任务提
 - 想评审方案：先看[V7 架构设计](docs/codex/v1/designs/自动循环进化编码智能体系统-v7.md)、[Agent 协议](docs/codex/v1/designs/自动循环进化编码智能体系统-agent-protocol.md)和[Docker 沙箱设计](docs/codex/v1/designs/docker-sandbox-runner-design.md)。
 - 想继续开发：从[核心代码入口](#核心代码入口)进入，再结合[Web UI 迭代记录](docs/codex/v1/plans/web-ui-task-template-management.md)确认最近改动。
 
+## Web 页面入口
+
+| 页面 | 本地地址 | 用途 |
+| :--- | :--- | :--- |
+| 首页 | [http://127.0.0.1:8765/](http://127.0.0.1:8765/) | 快速查看最近 Jobs、Runs、Patch，并运行示例任务。 |
+| 任务管理 | [http://127.0.0.1:8765/tasks?page=1&page_size=10](http://127.0.0.1:8765/tasks?page=1&page_size=10) | 推荐主入口；支持新建任务、搜索、分页、筛选、停止、删除和重新运行。 |
+| Job 状态 | `http://127.0.0.1:8765/jobs/{job_id}` | 查看 Web Job 实时状态、启动配置、执行链路、失败原因和运行心跳。 |
+| Run 详情 | `http://127.0.0.1:8765/runs/{run_id}` | 查看执行摘要、阶段时间线、运行产物、Docker 证据、最终报告和诊断日志。 |
+| Patch 审批 | `http://127.0.0.1:8765/runs/{run_id}` | 在 Run 详情页对 pending patch 执行批准、拒绝和批准后验证。 |
+
 ## 当前能力
 
 - Web UI 任务管理：`/tasks` 提供任务列表、运行中/已完成/失败/已停止筛选、搜索、分页、新建任务弹窗、停止、删除、重新运行。
