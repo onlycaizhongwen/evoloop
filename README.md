@@ -32,6 +32,7 @@ Evoloop 是一个自动循环进化编码智能体系统原型。它把任务提
 - Agent 协议：[docs/codex/v1/designs/自动循环进化编码智能体系统-agent-protocol.md](docs/codex/v1/designs/自动循环进化编码智能体系统-agent-protocol.md)
 - Docker 沙箱设计：[docs/codex/v1/designs/docker-sandbox-runner-design.md](docs/codex/v1/designs/docker-sandbox-runner-design.md)
 - Web UI 迭代记录：[docs/codex/v1/plans/web-ui-task-template-management.md](docs/codex/v1/plans/web-ui-task-template-management.md)
+- 真实演示验收记录：[docs/codex/v1/plans/demo-readiness.md](docs/codex/v1/plans/demo-readiness.md)
 - 演示脚本：[docs/codex/v1/plans/自动循环进化编码智能体系统-demo-script.md](docs/codex/v1/plans/自动循环进化编码智能体系统-demo-script.md)
 - 演讲大纲：[docs/codex/v1/presentation/自动循环进化编码智能体系统-演讲大纲.md](docs/codex/v1/presentation/自动循环进化编码智能体系统-演讲大纲.md)
 
