@@ -415,6 +415,120 @@ def test_run_detail_shows_task_template_context(monkeypatch, tmp_path: Path):
     assert "python -m unittest -q" in response.text
     assert "docker_team_backend.py" in response.text
     assert 'action="/runs/run-template-context/rerun"' in response.text
+    assert 'href="/runs/run-template-context/audit.md"' in response.text
+    assert "导出审计摘要" in response.text
+
+
+def test_run_audit_markdown_exports_shareable_summary(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    run_dir = tmp_path / ".omx" / "runs" / "run-audit"
+    _write_run_state(tmp_path, "run-audit", "task-audit", RunStatus.DONE, "done")
+    (run_dir / "task.json").write_text(
+        json.dumps(
+            {
+                "task_id": "task-audit",
+                "title": "审计导出演示任务",
+                "template_id": "docker_team_patch",
+                "execution_backend": "docker",
+                "agent_mode": "omx_team_patch",
+                "command_preset": "team_patch_backend",
+                "worktree_path": str(tmp_path / "worktree"),
+                "allowed_paths": ["calculator.py"],
+                "check_commands": {"test": "python -m pytest -q"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "final_report.md").write_text("Quality Gate passed\nReview confidence: 91", encoding="utf-8")
+    (run_dir / "logs" / "phase.log").write_text("phase=done event=end\n", encoding="utf-8")
+    (run_dir / "logs" / "docker_sandbox.jsonl").write_text(
+        json.dumps(
+            {
+                "phase": "hard_checks",
+                "image": "python:3.12-slim",
+                "network": "none",
+                "worktree_mount": "readonly",
+                "exit_code": 0,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    attempt_dir = run_dir / "attempts" / "001"
+    attempt_dir.mkdir(parents=True)
+    (attempt_dir / "hard_checks.json").write_text(
+        json.dumps(
+            {"commands": [{"name": "test", "command": "python -m pytest -q", "passed": True, "exit_code": 0}]}
+        ),
+        encoding="utf-8",
+    )
+    (attempt_dir / "review.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "task_id": "task-audit",
+                "pass": True,
+                "confidence": 91,
+                "summary": "review ok",
+                "issues": [],
+                "blocking": False,
+                "recommended_next_action": "pass",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (attempt_dir / "quality_report.json").write_text(
+        json.dumps(
+            {
+                "task_id": "task-audit",
+                "attempt": 1,
+                "change_type": "bugfix",
+                "hard_check_score": 40,
+                "review_pass": True,
+                "review_confidence": 91,
+                "review_score": 30,
+                "diff_risk_score": 10,
+                "quality_score": 100,
+                "passed": True,
+                "decision": "done",
+                "reason": "quality gate passed",
+            }
+        ),
+        encoding="utf-8",
+    )
+    patch_plan = PatchPlan(
+        task_id="task-audit",
+        summary="fix calculator",
+        operations=[{"op": "replace_text", "path": "calculator.py", "old": "return a - b", "new": "return a + b"}],
+    )
+    patch_result = PatchApplyResult(changed_files=["calculator.py"], risk_score=8)
+    state = RunState(
+        run_id="run-audit",
+        task_id="task-audit",
+        attempt=1,
+        max_attempts=1,
+        artifacts={"run_dir": str(run_dir)},
+    )
+    PendingPatchWriter().write(state, "patch_coder", patch_plan, patch_result)
+
+    response = TestClient(app).get("/runs/run-audit/audit.md")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/markdown")
+    assert response.headers["content-disposition"] == 'attachment; filename="run-audit-audit.md"'
+    assert "# Run Audit: run-audit" in response.text
+    assert "- Task ID: task-audit" in response.text
+    assert "- Backend: docker" in response.text
+    assert "- Agent: omx_team_patch" in response.text
+    assert "- Image: python:3.12-slim" in response.text
+    assert "- Network: none" in response.text
+    assert "- Hard Checks: passed / test:passed:exit=0" in response.text
+    assert "- Review: pass=True / confidence=91 / blocking=False / review ok" in response.text
+    assert "- Quality Report: decision=done / score=100 / passed=True / quality gate passed" in response.text
+    assert "- Changed Files: calculator.py" in response.text
+    assert "001-patch_coder.json" in response.text
+    assert "Quality Gate passed" in response.text
 
 
 def test_run_detail_reruns_task_from_run_task_json(monkeypatch, tmp_path: Path):
@@ -617,6 +731,9 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert 'href="/runs/run-done-template"' in response.text
     assert 'href="/jobs/job-failed-template"' in response.text
     assert 'href="/runs/run-failed-template">运行详情</a>' in response.text
+    assert 'href="/runs/run-done-template/audit.md">审计摘要</a>' in response.text
+    assert 'href="/runs/run-failed-template/audit.md">审计摘要</a>' in response.text
+    assert 'href="/runs//audit.md"' not in response.text
     assert 'action="/tasks/job-running-template/stop?status=all&amp;page=1&amp;page_size=10&amp;q="' in response.text
     assert 'action="/jobs/job-running-template/rerun"' not in response.text
     assert 'action="/jobs/job-done-template/rerun"' in response.text

@@ -12,7 +12,7 @@ from urllib.parse import urlencode, unquote
 
 import uvicorn
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -394,6 +394,35 @@ def run_detail(request: Request, run_id: str):
             "team_diagnostics": _read_first_optional(run_dir.glob("attempts/*/team_diagnostics.json")),
             "patches": patches,
         },
+    )
+
+
+@app.get("/runs/{run_id}/audit.md", response_class=PlainTextResponse)
+def run_audit_markdown(run_id: str):
+    repository = FileStateRepository()
+    state = repository.load_state(run_id)
+    run_dir = RUNS_DIR / run_id
+    patches = PendingPatchService().list(run_id=run_id)
+    task_context = _load_task_context(run_dir)
+    final_report = _read_optional(run_dir / "final_report.md")
+    phase_log = _read_optional(run_dir / "logs" / "phase.log")
+    docker_evidence = _load_docker_evidence(run_dir)
+    phase_timeline = _parse_phase_timeline(phase_log)
+    validation_evidence = _load_validation_evidence(run_dir, state.attempt)
+    content = _build_run_audit_markdown(
+        state=state,
+        run_dir=run_dir,
+        patches=patches,
+        task_context=task_context,
+        final_report=final_report,
+        docker_evidence=docker_evidence,
+        phase_timeline=phase_timeline,
+        validation_evidence=validation_evidence,
+    )
+    return PlainTextResponse(
+        content,
+        media_type="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="{_safe_id(run_id)}-audit.md"'},
     )
 
 
@@ -1064,6 +1093,146 @@ def _build_run_artifacts(run_dir: Path, task_context: dict[str, str], patches: l
     }
 
 
+def _load_validation_evidence(run_dir: Path, attempt: int) -> dict[str, object]:
+    attempt_dir = run_dir / "attempts" / f"{attempt:03d}"
+    hard_checks = _read_json_optional(attempt_dir / "hard_checks.json")
+    review = _read_json_optional(attempt_dir / "review.json")
+    quality_report = _read_json_optional(attempt_dir / "quality_report.json")
+    return {
+        "hard_checks": _format_hard_check_evidence(hard_checks),
+        "review": _format_review_evidence(review),
+        "quality_report": _format_quality_report_evidence(quality_report),
+    }
+
+
+def _format_hard_check_evidence(payload: dict[str, object] | None) -> str:
+    if not payload:
+        return "not recorded"
+    commands = payload.get("commands")
+    if not isinstance(commands, list) or not commands:
+        return "not recorded"
+    passed = all(bool(command.get("passed")) for command in commands if isinstance(command, dict))
+    command_labels = []
+    for command in commands:
+        if not isinstance(command, dict):
+            continue
+        name = str(command.get("name") or "check")
+        status = "passed" if command.get("passed") else "failed"
+        exit_code = command.get("exit_code", "")
+        command_labels.append(f"{name}:{status}:exit={exit_code}")
+    return f"{'passed' if passed else 'failed'} / " + ", ".join(command_labels)
+
+
+def _format_review_evidence(payload: dict[str, object] | None) -> str:
+    if not payload:
+        return "not recorded"
+    passed = payload.get("pass", payload.get("pass_"))
+    confidence = payload.get("confidence", "unknown")
+    summary = str(payload.get("summary") or "").strip() or "no summary"
+    blocking = payload.get("blocking", "unknown")
+    return f"pass={passed} / confidence={confidence} / blocking={blocking} / {summary}"
+
+
+def _format_quality_report_evidence(payload: dict[str, object] | None) -> str:
+    if not payload:
+        return "not recorded"
+    decision = payload.get("decision", "unknown")
+    score = payload.get("quality_score", "unknown")
+    passed = payload.get("passed", "unknown")
+    reason = str(payload.get("reason") or "").strip() or "no reason"
+    return f"decision={decision} / score={score} / passed={passed} / {reason}"
+
+
+def _build_run_audit_markdown(
+    *,
+    state: RunState,
+    run_dir: Path,
+    patches: list[dict[str, object]],
+    task_context: dict[str, str],
+    final_report: str,
+    docker_evidence: dict[str, object],
+    phase_timeline: list[dict[str, str]],
+    validation_evidence: dict[str, object],
+) -> str:
+    execution_summary = _build_execution_summary(state, patches, docker_evidence, phase_timeline)
+    run_artifacts = _build_run_artifacts(run_dir, task_context, patches)
+    task_meta = _build_run_task_meta(state, task_context)
+    lines = [
+        f"# Run Audit: {state.run_id}",
+        "",
+        "## Summary",
+        f"- Task: {task_meta['task_name']}",
+        f"- Task ID: {task_meta['task_id']}",
+        f"- Status: {execution_summary['status_label']} / {execution_summary['status']}",
+        f"- Phase: {execution_summary['phase']}",
+        f"- Attempt: {execution_summary['attempt']}",
+        f"- Updated At: {execution_summary['updated_at']}",
+        "",
+        "## Execution",
+        f"- Template: {task_meta['template']}",
+        f"- Backend: {task_meta['backend']}",
+        f"- Agent: {task_meta['agent']}",
+        f"- Command Preset: {task_context.get('command_preset') or 'custom/unknown'}",
+        f"- Test Command: {task_context.get('test_command') or 'unknown'}",
+        f"- Worktree: {run_artifacts['worktree']}",
+        f"- Allowed Paths: {task_context.get('allowed_paths') or 'unknown'}",
+        "",
+        "## Quality Gate",
+        f"- Decision: {_quality_gate_label(str(state.status), str(state.current_phase))}",
+        f"- Patch Stats: {execution_summary['patch_stats']}",
+        f"- Last Event: {execution_summary['last_event']}",
+        f"- Hard Checks: {validation_evidence['hard_checks']}",
+        f"- Review: {validation_evidence['review']}",
+        f"- Quality Report: {validation_evidence['quality_report']}",
+        "",
+        "## Docker Evidence",
+    ]
+    if docker_evidence.get("enabled"):
+        lines.extend(
+            [
+                f"- Enabled: yes",
+                f"- Image: {docker_evidence.get('image') or 'unknown'}",
+                f"- Count: {docker_evidence.get('count') or 0}",
+                f"- Network: {docker_evidence.get('network') or 'unknown'}",
+                f"- Worktree Mount: {docker_evidence.get('worktree_mount') or 'unknown'}",
+                f"- Last Phase: {docker_evidence.get('phase') or 'unknown'}",
+                f"- Last Exit Code: {docker_evidence.get('exit_code') or 'unknown'}",
+            ]
+        )
+    else:
+        lines.append("- Enabled: no")
+
+    lines.extend(
+        [
+            "",
+            "## Artifacts",
+            f"- Run Dir: {run_artifacts['run_dir']}",
+            f"- Changed Files: {run_artifacts['changed_files_label']}",
+        ]
+    )
+    for row in run_artifacts["rows"]:
+        lines.append(f"- {row['label']}: {row['status']} ({row['path']})")
+
+    lines.extend(["", "## Patches"])
+    if run_artifacts["patch_rows"]:
+        for patch in run_artifacts["patch_rows"]:
+            lines.append(
+                f"- {patch['name']}: {patch['status']} / risk={patch['risk_score']} / files={patch['files']}"
+            )
+    else:
+        lines.append("- none")
+
+    if phase_timeline:
+        lines.extend(["", "## Phase Timeline"])
+        for event in phase_timeline[-10:]:
+            lines.append(f"- {event.get('summary') or event.get('message') or 'event'}")
+
+    lines.extend(["", "## Final Report"])
+    lines.append(final_report.strip() if final_report.strip() else "No final report recorded.")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _artifact_row(label: str, path: Path) -> dict[str, str]:
     exists = path.exists()
     return {
@@ -1567,6 +1736,16 @@ def _read_optional(path: Path) -> str:
     if not path.exists():
         return ""
     return path.read_text(encoding="utf-8", errors="replace")
+
+
+def _read_json_optional(path: Path) -> dict[str, object] | None:
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def _read_first_optional(paths: Iterable[Path]) -> str:
