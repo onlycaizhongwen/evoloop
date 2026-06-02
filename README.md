@@ -34,6 +34,15 @@ Evoloop 是一个自动循环进化编码智能体系统原型。它把任务提
 | Run 详情 | `http://127.0.0.1:8765/runs/{run_id}` | 查看执行摘要、阶段时间线、运行产物、Docker 证据、最终报告和诊断日志。 |
 | Patch 审批 | `http://127.0.0.1:8765/runs/{run_id}` | 在 Run 详情页对 pending patch 执行批准、拒绝和批准后验证。 |
 
+## 演示前检查清单
+
+- OMX 可用：`omx doctor` 能通过关键检查，且本机 Codex CLI 已完成认证。
+- Docker 可用：Docker Desktop 已启动；计划演示 Docker 模板时优先选择 `Docker OMX Team Patch`。
+- Web 可用：运行 `python -m orchestrator.interfaces.web.main`，打开[任务管理页](http://127.0.0.1:8765/tasks?page=1&page_size=10)。
+- 基线通过：`python -m pytest -q tests/test_web_ui.py` 和 `python -m pytest -q` 均通过。
+- 演示路径清楚：提交任务后先看 Job 状态页，再进入 Run 详情页讲执行摘要、时间线、运行产物、Docker 证据和补丁审批。
+- 失败预案：如果真实 agent 或 Docker 环境波动，切换到 `Mock Flow Demo` 讲 Orchestrator 状态流转，或使用历史 Run 详情页讲审计能力。
+
 ## 当前能力
 
 - Web UI 任务管理：`/tasks` 提供任务列表、运行中/已完成/失败/已停止筛选、搜索、分页、新建任务弹窗、停止、删除、重新运行。
