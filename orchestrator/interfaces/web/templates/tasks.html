@@ -152,6 +152,9 @@
                     <form method="post" action="/jobs/{{ job.job_id }}/rerun">
                       <button type="submit" class="secondary">重新运行</button>
                     </form>
+                    {% elif job.rerun_unavailable_reason %}
+                    <span class="button disabled">无法重新运行</span>
+                    <span class="muted-line">{{ job.rerun_unavailable_reason }}</span>
                     {% endif %}
                     <form method="post" action="/tasks/{{ job.job_id }}/delete?{{ task_query }}">
                       <button type="submit" class="danger" data-confirm="确认从任务列表移除该记录？run 目录和审计日志会保留。">删除</button>

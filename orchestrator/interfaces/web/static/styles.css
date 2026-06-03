@@ -439,6 +439,17 @@ h2 {
   padding-left: 20px;
 }
 
+.alert-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.alert-actions form {
+  margin: 0;
+}
+
 .inline-actions {
   display: flex;
   flex-wrap: wrap;

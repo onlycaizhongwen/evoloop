@@ -399,7 +399,7 @@ def delete_task(
 
 
 @app.get("/runs/{run_id}", response_class=HTMLResponse)
-def run_detail(request: Request, run_id: str):
+def run_detail(request: Request, run_id: str, rerun_error: str = ""):
     repository = FileStateRepository()
     state = repository.load_state(run_id)
     run_dir = RUNS_DIR / run_id
@@ -410,6 +410,7 @@ def run_detail(request: Request, run_id: str):
     docker_evidence = _load_docker_evidence(run_dir)
     phase_timeline = _parse_phase_timeline(phase_log)
     validation_evidence = _load_validation_evidence(run_dir, state.attempt)
+    run_can_rerun = FileStateRepository().task_path_for_run(_safe_id(run_id)).exists()
     return TEMPLATES.TemplateResponse(
         request,
         "run_detail.html",
@@ -431,7 +432,9 @@ def run_detail(request: Request, run_id: str):
             "run_artifacts": _build_run_artifacts(run_dir, task_context, patches),
             "task_context": task_context,
             "task_meta": _build_run_task_meta(state, task_context),
-            "failure_hint": _build_run_failure_hint(state, final_report, phase_log),
+            "run_can_rerun": run_can_rerun,
+            "failure_hint": _build_run_failure_hint(state, final_report, phase_log, validation_evidence),
+            "rerun_error": _build_rerun_error(rerun_error),
             "final_report": final_report,
             "agent_log": _read_optional(run_dir / "logs" / "agent.log"),
             "phase_log": phase_log,
@@ -463,6 +466,7 @@ def run_audit_markdown(run_id: str):
         patches=patches,
         task_context=task_context,
         final_report=final_report,
+        phase_log=phase_log,
         docker_evidence=docker_evidence,
         phase_timeline=phase_timeline,
         validation_evidence=validation_evidence,
@@ -489,9 +493,10 @@ def rerun_job(job_id: str):
 
 @app.post("/runs/{run_id}/rerun")
 def rerun_run(run_id: str):
-    task_path = FileStateRepository().task_path_for_run(_safe_id(run_id))
+    safe_run_id = _safe_id(run_id)
+    task_path = FileStateRepository().task_path_for_run(safe_run_id)
     if not task_path.exists():
-        return RedirectResponse(url=f"/runs/{_safe_id(run_id)}", status_code=303)
+        return RedirectResponse(url=f"/runs/{safe_run_id}?rerun_error=missing_task", status_code=303)
     new_job_id = _rerun_task_path(task_path)
     return RedirectResponse(url=f"/jobs/{new_job_id}", status_code=303)
 
@@ -908,6 +913,7 @@ def _build_task_manager_job(job: dict[str, Any]) -> dict[str, str]:
     quality_summary = _load_task_manager_quality_summary(run_id)
     review_issue_label = f"Review issues: {_count_review_issues(run_id)}" if run_id else "Review issues: 0"
     review_issue_summary = _first_review_issue_summary(run_id)
+    can_rerun = status != "running" and bool(_task_path_for_job(job, run_id))
     return {
         "job_id": job_id,
         "task_name": task_context.get("title") or task_context.get("task_id") or job_id,
@@ -932,7 +938,8 @@ def _build_task_manager_job(job: dict[str, Any]) -> dict[str, str]:
         "run_detail_url": f"/runs/{run_id}" if run_id else "",
         "evidence_url": f"/runs/{run_id}#validation-evidence" if run_id else "",
         "can_stop": "1" if status == "running" else "",
-        "can_rerun": "1" if status != "running" else "",
+        "can_rerun": "1" if can_rerun else "",
+        "rerun_unavailable_reason": "" if can_rerun or status == "running" else "缺少原始 task.json",
     }
 
 
@@ -1038,7 +1045,12 @@ def _build_rerun_error(code: str) -> dict[str, str]:
     return {"enabled": ""}
 
 
-def _build_run_failure_hint(state: RunState, final_report: str, phase_log: str) -> dict[str, str]:
+def _build_run_failure_hint(
+    state: RunState,
+    final_report: str,
+    phase_log: str,
+    validation_evidence: dict[str, object] | None = None,
+) -> dict[str, str]:
     status = str(state.status)
     if status not in {"halted", "retrying"}:
         return {"enabled": ""}
@@ -1049,8 +1061,39 @@ def _build_run_failure_hint(state: RunState, final_report: str, phase_log: str) 
         "title": "失败原因",
         "phase": phase,
         "reason": reason,
+        "quality_reason": _validation_quality_reason(validation_evidence),
+        "review_issue": _validation_first_review_issue(validation_evidence),
         "next_action": _suggest_next_action(phase, reason),
     }
+
+
+def _validation_quality_reason(validation_evidence: dict[str, object] | None) -> str:
+    if not validation_evidence:
+        return ""
+    quality_report = str(validation_evidence.get("quality_report") or "")
+    if not quality_report or quality_report == "not recorded":
+        return ""
+    parts = [part.strip() for part in quality_report.split(" / ") if part.strip()]
+    return parts[-1] if parts else quality_report
+
+
+def _validation_first_review_issue(validation_evidence: dict[str, object] | None) -> str:
+    if not validation_evidence:
+        return ""
+    review_issue_rows = validation_evidence.get("review_issue_rows")
+    if not isinstance(review_issue_rows, list):
+        return ""
+    for issue in review_issue_rows:
+        if not isinstance(issue, dict):
+            continue
+        severity = str(issue.get("severity") or "unknown")
+        location = str(issue.get("location") or "-")
+        message = str(issue.get("message") or "").strip()
+        if not message and location == "-":
+            continue
+        issue_label = f"{severity}: {message}" if message else severity
+        return f"{location} / {issue_label}"
+    return ""
 
 
 def _build_execution_chain(
@@ -1338,6 +1381,7 @@ def _build_run_audit_markdown(
     patches: list[dict[str, object]],
     task_context: dict[str, str],
     final_report: str,
+    phase_log: str,
     docker_evidence: dict[str, object],
     phase_timeline: list[dict[str, str]],
     validation_evidence: dict[str, object],
@@ -1345,6 +1389,9 @@ def _build_run_audit_markdown(
     execution_summary = _build_execution_summary(state, patches, docker_evidence, phase_timeline)
     run_artifacts = _build_run_artifacts(run_dir, task_context, patches)
     task_meta = _build_run_task_meta(state, task_context)
+    failure_hint = _build_run_failure_hint(state, final_report, phase_log, validation_evidence)
+    quality_reason = _validation_quality_reason(validation_evidence)
+    first_review_issue = _validation_first_review_issue(validation_evidence)
     lines = [
         f"# Run Audit: {state.run_id}",
         "",
@@ -1372,9 +1419,23 @@ def _build_run_audit_markdown(
         f"- Hard Checks: {validation_evidence['hard_checks']}",
         f"- Review: {validation_evidence['review']}",
         f"- Quality Report: {validation_evidence['quality_report']}",
+        *( [f"- Quality Reason: {quality_reason}"] if quality_reason else [] ),
+        *( [f"- First Review Issue: {first_review_issue}"] if first_review_issue else [] ),
         "",
         "## Docker Evidence",
     ]
+    if failure_hint.get("enabled"):
+        lines.extend(
+            [
+                "## Failure Summary",
+                f"- Phase: {failure_hint.get('phase') or 'unknown'}",
+                f"- Reason: {failure_hint.get('reason') or 'unknown'}",
+                *( [f"- Quality Gate: {failure_hint['quality_reason']}"] if failure_hint.get("quality_reason") else [] ),
+                *( [f"- First Review Issue: {failure_hint['review_issue']}"] if failure_hint.get("review_issue") else [] ),
+                f"- Next Action: {failure_hint.get('next_action') or 'unknown'}",
+                "",
+            ]
+        )
     review_issue_rows = validation_evidence.get("review_issue_rows")
     if isinstance(review_issue_rows, list) and review_issue_rows:
         lines.extend(["## Review Issues"])

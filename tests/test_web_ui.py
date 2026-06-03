@@ -335,6 +335,32 @@ def test_run_detail_frontloads_halted_failure_reason(monkeypatch, tmp_path: Path
     _write_run_state(tmp_path, "run-halted-reason", "task-halted-reason", RunStatus.HALTED, "hard_checks")
     (run_dir / "final_report.md").write_text("Reason: pytest failed on calculator test\nMore details", encoding="utf-8")
     (run_dir / "logs" / "phase.log").write_text("phase=hard_checks event=halt\n", encoding="utf-8")
+    attempt_dir = run_dir / "attempts" / "001"
+    attempt_dir.mkdir(parents=True)
+    (attempt_dir / "quality_report.json").write_text(
+        json.dumps({"quality_score": 61, "decision": "halt", "passed": False, "reason": "quality score below threshold"}),
+        encoding="utf-8",
+    )
+    (attempt_dir / "review.json").write_text(
+        json.dumps(
+            {
+                "pass": False,
+                "confidence": 70,
+                "summary": "review found blocker",
+                "issues": [
+                    {
+                        "severity": "major",
+                        "category": "safety",
+                        "file": "calculator.py",
+                        "line": 8,
+                        "message": "missing rollback path",
+                    }
+                ],
+                "blocking": True,
+            }
+        ),
+        encoding="utf-8",
+    )
 
     response = TestClient(app).get("/runs/run-halted-reason")
 
@@ -342,6 +368,12 @@ def test_run_detail_frontloads_halted_failure_reason(monkeypatch, tmp_path: Path
     assert "失败原因" in response.text
     assert "阶段：hard_checks" in response.text
     assert "Reason: pytest failed on calculator test" in response.text
+    assert "Quality Gate：quality score below threshold" in response.text
+    assert "首个 Review Issue：calculator.py:8 / major: missing rollback path" in response.text
+    assert 'action="/runs/run-halted-reason/rerun"' in response.text
+    assert "重新运行" in response.text
+    assert 'href="#validation-evidence">查看验证证据</a>' in response.text
+    assert 'href="/runs/run-halted-reason/audit.md">导出审计摘要</a>' in response.text
     assert "确认测试失败原因" in response.text
     assert "阶段时间线" in response.text
     assert "hard_checks" in response.text
@@ -612,11 +644,57 @@ def test_run_audit_markdown_exports_shareable_summary(monkeypatch, tmp_path: Pat
     assert "- Hard Checks: passed / test:passed:exit=0" in response.text
     assert "- Review: pass=True / confidence=91 / blocking=False / review ok" in response.text
     assert "- Quality Report: decision=done / score=100 / passed=True / quality gate passed" in response.text
+    assert "- Quality Reason: quality gate passed" in response.text
+    assert "- First Review Issue: calculator.py:5 / major: missing negative input case" in response.text
     assert "## Review Issues" in response.text
     assert "major / test / calculator.py:5 / missing negative input case / suggestion=add negative input coverage" in response.text
     assert "- Changed Files: calculator.py" in response.text
     assert "001-patch_coder.json" in response.text
     assert "Quality Gate passed" in response.text
+
+
+def test_run_audit_markdown_exports_failure_summary(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    run_dir = tmp_path / ".omx" / "runs" / "run-audit-halted"
+    _write_run_state(tmp_path, "run-audit-halted", "task-audit-halted", RunStatus.HALTED, "quality_gate")
+    (run_dir / "final_report.md").write_text("Reason: quality gate halted this run\nMore details", encoding="utf-8")
+    (run_dir / "logs" / "phase.log").write_text("phase=quality_gate event=halt\n", encoding="utf-8")
+    attempt_dir = run_dir / "attempts" / "001"
+    attempt_dir.mkdir(parents=True)
+    (attempt_dir / "review.json").write_text(
+        json.dumps(
+            {
+                "pass": False,
+                "confidence": 72,
+                "summary": "review blocked",
+                "issues": [
+                    {
+                        "severity": "major",
+                        "category": "safety",
+                        "file": "deploy.py",
+                        "line": 12,
+                        "message": "missing rollback path",
+                    }
+                ],
+                "blocking": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (attempt_dir / "quality_report.json").write_text(
+        json.dumps({"quality_score": 62, "decision": "halt", "passed": False, "reason": "quality score below threshold"}),
+        encoding="utf-8",
+    )
+
+    response = TestClient(app).get("/runs/run-audit-halted/audit.md")
+
+    assert response.status_code == 200
+    assert "## Failure Summary" in response.text
+    assert "- Phase: quality_gate" in response.text
+    assert "- Reason: Reason: quality gate halted this run" in response.text
+    assert "- Quality Gate: quality score below threshold" in response.text
+    assert "- First Review Issue: deploy.py:12 / major: missing rollback path" in response.text
+    assert "- Next Action:" in response.text
 
 
 def test_run_detail_reruns_task_from_run_task_json(monkeypatch, tmp_path: Path):
@@ -652,6 +730,28 @@ def test_run_detail_reruns_task_from_run_task_json(monkeypatch, tmp_path: Path):
     assert response.headers["location"].startswith("/jobs/job-")
     copied_tasks = sorted((tmp_path / ".omx" / "web-tasks").glob("task-run-rerun-source-rerun-*.json"))
     assert copied_tasks
+
+
+def test_run_detail_rerun_missing_task_shows_feedback(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    run_dir = tmp_path / ".omx" / "runs" / "run-missing-task-rerun"
+    _write_run_state(tmp_path, "run-missing-task-rerun", "task-missing-run-rerun", RunStatus.DONE, "done")
+    (run_dir / "task.json").unlink()
+
+    client = TestClient(app)
+    response = client.post("/runs/run-missing-task-rerun/rerun", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/runs/run-missing-task-rerun?rerun_error=missing_task"
+
+    detail = client.get("/runs/run-missing-task-rerun?rerun_error=missing_task")
+
+    assert detail.status_code == 200
+    assert "无法重新运行" in detail.text
+    assert 'action="/runs/run-missing-task-rerun/rerun"' not in detail.text
+    assert "缺少原始 task.json，无法从该 run 直接重新运行。" in detail.text
+    assert "返回任务管理" in detail.text
+    assert "新建任务" in detail.text
 
 
 def test_run_detail_infers_command_preset_for_legacy_task(monkeypatch, tmp_path: Path):
@@ -785,7 +885,7 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
             "job_id": "job-failed-template",
             "status": "failed",
             "message": "failed",
-            "task_path": str(failed_task),
+            "task_path": "",
             "run_id": "run-failed-template",
         }
     )
@@ -882,6 +982,9 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert 'action="/tasks/job-running-template/stop?status=all&amp;quality=all&amp;page=1&amp;page_size=10&amp;q="' in response.text
     assert 'action="/jobs/job-running-template/rerun"' not in response.text
     assert 'action="/jobs/job-done-template/rerun"' in response.text
+    assert 'action="/jobs/job-failed-template/rerun"' not in response.text
+    assert "无法重新运行" in response.text
+    assert "缺少原始 task.json" in response.text
     assert 'action="/tasks/job-running-template/delete?status=all&amp;quality=all&amp;page=1&amp;page_size=10&amp;q="' in response.text
     assert "停止" in response.text
     assert "重新运行" in response.text
@@ -1209,6 +1312,7 @@ def test_web_static_styles_available():
     assert response.status_code == 200
     assert ".shell" in response.text
     assert ".status-pill.severity-major" in response.text
+    assert ".alert-actions" in response.text
 
 
 def test_web_index_exposes_omx_team_patch_mode(monkeypatch, tmp_path: Path):

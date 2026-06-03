@@ -32,12 +32,37 @@
       </div>
     </section>
 
+    {% if rerun_error.enabled %}
+    <section class="alert warning">
+      <strong>{{ rerun_error.title }}</strong>
+      <span>{{ rerun_error.message }}</span>
+      <span>{{ rerun_error.next_action }}</span>
+      <div class="inline-actions">
+        <a class="button secondary" href="/tasks">返回任务管理</a>
+        <a class="button" href="/">新建任务</a>
+      </div>
+    </section>
+    {% endif %}
+
     {% if failure_hint.enabled %}
     <section class="alert danger">
       <strong>{{ failure_hint.title }}</strong>
       <span>阶段：{{ failure_hint.phase }}</span>
       <span>原因：{{ failure_hint.reason }}</span>
+      {% if failure_hint.quality_reason %}<span>Quality Gate：{{ failure_hint.quality_reason }}</span>{% endif %}
+      {% if failure_hint.review_issue %}<span>首个 Review Issue：{{ failure_hint.review_issue }}</span>{% endif %}
       <span>建议：{{ failure_hint.next_action }}</span>
+      <div class="alert-actions">
+        {% if run_can_rerun %}
+        <form method="post" action="/runs/{{ run_id }}/rerun">
+          <button type="submit">重新运行</button>
+        </form>
+        {% else %}
+        <span class="button disabled">无法重新运行</span>
+        {% endif %}
+        <a class="button secondary" href="#validation-evidence">查看验证证据</a>
+        <a class="button secondary" href="/runs/{{ run_id }}/audit.md">导出审计摘要</a>
+      </div>
     </section>
     {% endif %}
 
@@ -263,12 +288,17 @@
       <div class="section-title compact">
         <h2>任务操作</h2>
         <div class="actions">
+          {% if run_can_rerun %}
           <form method="post" action="/runs/{{ run_id }}/rerun">
             <button type="submit">重新运行</button>
           </form>
+          {% else %}
+          <span class="button disabled">无法重新运行</span>
+          {% endif %}
           <a class="button secondary" href="/runs/{{ run_id }}/audit.md">导出审计摘要</a>
           <a class="button secondary" href="/tasks">返回任务列表</a>
         </div>
+        {% if not run_can_rerun %}<p class="empty">缺少原始 task.json，无法从该 run 直接重新运行。</p>{% endif %}
       </div>
     </section>
 
