@@ -285,4 +285,5 @@
 - 安全边界：批量删除只移除 Web Job 记录，不删除 run 目录和审计日志；批量重新运行跳过 running Job 和缺少原始 `task.json` 的 Job。
 - 产物：`orchestrator/interfaces/web/main.py`、`orchestrator/interfaces/web/templates/tasks.html`、`tests/test_web_ui.py`、`docs/codex/v1/plans/web-ui-task-template-management.md`。
 - 验证：`python -m pytest -q tests/test_web_ui.py -k "task_manager"` 通过，`6 passed, 46 deselected`；`python -m py_compile orchestrator/interfaces/web/main.py` 通过；`python -m pytest -q tests/test_web_ui.py` 通过，`52 passed`；`python -m pytest -q` 通过，`137 passed`；渲染 `/tasks` 返回 200，页面包含批量表单、全选控件、`/tasks/batch` endpoint 和全选 JS 绑定；本地 Uvicorn smoke `http://127.0.0.1:8767/tasks` 返回 200，并包含同一组任务管理控件；非破坏性 `POST /tasks/batch` 未选择任务时返回 303 到已编码的 `batch=` 提示，回跳页显示 `未选择任务，未执行批量操作。`。
+- 视觉检查：本地 Chrome headless 截图 `.tmp/task-manager-8767.png` 显示任务管理标题、筛选区、批量操作下拉、checkbox 列、任务表格和行操作按钮正常渲染，未见明显重叠。
 - Trace：`docs/codex/v1/trace/web-ui-task-manager-batch-operations-trace.md`，结论为计划、实现、测试和状态记录已闭环，未发现未对齐项。

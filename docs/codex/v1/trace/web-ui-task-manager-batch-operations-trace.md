@@ -112,6 +112,7 @@
 - 渲染 `/tasks`：返回 200，页面包含批量表单、全选控件、`/tasks/batch` endpoint 和全选 JS 绑定
 - 本地 Uvicorn smoke：`http://127.0.0.1:8767/tasks` 返回 200，并包含批量表单
 - 非破坏性 `POST /tasks/batch`：未选择任务时返回 303 到已编码的 `batch=` 提示，回跳页显示 `未选择任务，未执行批量操作。`
+- 本地 Chrome headless 视觉检查：截图 `.tmp/task-manager-8767.png` 显示任务管理标题、筛选区、批量操作下拉、checkbox 列、任务表格和行操作按钮正常渲染，未见明显重叠
 
 ## 总结结论
 
