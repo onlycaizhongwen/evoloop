@@ -256,3 +256,17 @@
 - Job status progress cards and Run detail summary panels now render Chinese status labels through presentation-only fields.
 - Raw `job.status`, progress `status`, and `RunStatus` values remain unchanged for refresh, redirect, reconciliation, and orchestration decisions.
 - Validation: `python -m pytest -q tests/test_web_ui.py` passed with `48 passed`; `python -m pytest -q` passed with `133 passed`.
+
+## 2026-06-04 Task Manager Rerun Filter
+
+- `/tasks` now supports a `rerun=all|available|unavailable` filter so operators can quickly find jobs that can be run again or legacy/partial jobs missing their original `task.json`.
+- Status cards, pagination, stop, and delete actions preserve the active rerun filter together with status, quality, search, page, and page size.
+- The task search index now includes the rerun-unavailable reason, so messages such as `缺少原始 task.json` are discoverable from the toolbar.
+- Validation: `python -m pytest -q tests/test_web_ui.py -k "task_manager"` passed with `5 passed, 46 deselected`; `python -m py_compile orchestrator/interfaces/web/main.py` passed; `python -m pytest -q tests/test_web_ui.py` passed with `51 passed`; `python -m pytest -q` passed with `136 passed`.
+
+## 2026-06-04 Task Manager Batch Operations
+
+- `/tasks` now includes a page-scoped batch form with current-page checkboxes and actions for stopping running jobs, rerunning eligible jobs, and deleting Web Job records.
+- `POST /tasks/batch` preserves the current status, quality, rerun, search, page, and page-size context while returning a visible success/skipped/failed summary.
+- Batch rerun reuses existing task-copy behavior and skips running jobs or jobs missing their original `task.json`; batch delete only removes Web Job records and keeps run directories plus audit logs.
+- Validation: `python -m pytest -q tests/test_web_ui.py -k "task_manager"` passed with `6 passed, 46 deselected`; `python -m py_compile orchestrator/interfaces/web/main.py` passed; `python -m pytest -q tests/test_web_ui.py` passed with `52 passed`; `python -m pytest -q` passed with `137 passed`; rendered `/tasks` returned 200 and contained the batch form, select-all control, `/tasks/batch` endpoint, and select-all JS binding; local Uvicorn smoke on `http://127.0.0.1:8767/tasks` returned 200 with the same task manager controls; non-destructive `POST /tasks/batch` with no selected jobs returned 303 to an encoded `batch=` notice and the follow-up page showed `未选择任务，未执行批量操作。`.

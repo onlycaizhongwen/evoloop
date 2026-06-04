@@ -942,6 +942,12 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert "Docker OMX Team Patch" in response.text
     assert "Docker Patch JSON" in response.text
     assert "<table" in response.text
+    assert 'id="task-batch-form"' in response.text
+    assert 'data-select-all-tasks' in response.text
+    assert 'name="job_ids"' in response.text
+    assert '<option value="stop">停止运行中任务</option>' in response.text
+    assert '<option value="rerun">重新运行可重跑任务</option>' in response.text
+    assert '<option value="delete">删除任务记录</option>' in response.text
     assert "<th>任务名称</th>" in response.text
     assert "<th>Job ID</th>" in response.text
     assert "<th>Run ID</th>" in response.text
@@ -949,10 +955,14 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert "<th>执行</th>" in response.text
     assert "<th>质量</th>" in response.text
     assert 'name="quality"' in response.text
+    assert 'name="rerun"' in response.text
     assert '<option value="all" selected>All (3)</option>' in response.text
     assert '<option value="passed" >Passed (1)</option>' in response.text
     assert '<option value="failed" >Failed (1)</option>' in response.text
     assert '<option value="missing" >Missing (1)</option>' in response.text
+    assert '<option value="all" selected>All (3)</option>' in response.text
+    assert '<option value="available" >Available (1)</option>' in response.text
+    assert '<option value="unavailable" >Unavailable (1)</option>' in response.text
     assert response.text.index("<th>任务名称</th>") < response.text.index("<th>Job ID</th>")
     assert response.text.index("<th>更新时间</th>") < response.text.index("<th>状态</th>")
     assert response.text.index("<th>状态</th>") < response.text.index("<th>质量</th>")
@@ -979,13 +989,13 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert 'href="/runs/run-done-template/audit.md">审计摘要</a>' in response.text
     assert 'href="/runs/run-failed-template/audit.md">审计摘要</a>' in response.text
     assert 'href="/runs//audit.md"' not in response.text
-    assert 'action="/tasks/job-running-template/stop?status=all&amp;quality=all&amp;page=1&amp;page_size=10&amp;q="' in response.text
+    assert 'action="/tasks/job-running-template/stop?status=all&amp;quality=all&amp;rerun=all&amp;page=1&amp;page_size=10&amp;q="' in response.text
     assert 'action="/jobs/job-running-template/rerun"' not in response.text
     assert 'action="/jobs/job-done-template/rerun"' in response.text
     assert 'action="/jobs/job-failed-template/rerun"' not in response.text
     assert "无法重新运行" in response.text
     assert "缺少原始 task.json" in response.text
-    assert 'action="/tasks/job-running-template/delete?status=all&amp;quality=all&amp;page=1&amp;page_size=10&amp;q="' in response.text
+    assert 'action="/tasks/job-running-template/delete?status=all&amp;quality=all&amp;rerun=all&amp;page=1&amp;page_size=10&amp;q="' in response.text
     assert "停止" in response.text
     assert "重新运行" in response.text
     assert "删除" in response.text
@@ -1064,6 +1074,12 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert "job-failed-template" in searched_review_issue_summary.text
     assert "job-done-template" not in searched_review_issue_summary.text
 
+    searched_rerun_unavailable = TestClient(app).get("/tasks?q=缺少原始+task.json")
+
+    assert searched_rerun_unavailable.status_code == 200
+    assert "job-failed-template" in searched_rerun_unavailable.text
+    assert "job-done-template" not in searched_rerun_unavailable.text
+
     filtered_quality_passed = TestClient(app).get("/tasks?quality=passed")
 
     assert filtered_quality_passed.status_code == 200
@@ -1083,6 +1099,21 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert filtered_quality_missing.status_code == 200
     assert "job-running-template" in filtered_quality_missing.text
     assert "job-done-template" not in filtered_quality_missing.text
+
+    filtered_rerun_available = TestClient(app).get("/tasks?rerun=available")
+
+    assert filtered_rerun_available.status_code == 200
+    assert "job-done-template" in filtered_rerun_available.text
+    assert "job-failed-template" not in filtered_rerun_available.text
+    assert "job-running-template" not in filtered_rerun_available.text
+    assert '<option value="available" selected>Available (1)</option>' in filtered_rerun_available.text
+
+    filtered_rerun_unavailable = TestClient(app).get("/tasks?rerun=unavailable")
+
+    assert filtered_rerun_unavailable.status_code == 200
+    assert "job-failed-template" in filtered_rerun_unavailable.text
+    assert "job-done-template" not in filtered_rerun_unavailable.text
+    assert '<option value="unavailable" selected>Unavailable (1)</option>' in filtered_rerun_unavailable.text
 
 
 def test_task_manager_paginates_jobs(monkeypatch, tmp_path: Path):
@@ -1112,8 +1143,8 @@ def test_task_manager_paginates_jobs(monkeypatch, tmp_path: Path):
 
     assert response.status_code == 200
     assert "共 12 条，第 2 / 3 页" in response.text
-    assert 'href="/tasks?status=failed&amp;quality=all&amp;page=1&amp;page_size=5&amp;q="' in response.text
-    assert 'href="/tasks?status=failed&amp;quality=all&amp;page=3&amp;page_size=5&amp;q="' in response.text
+    assert 'href="/tasks?status=failed&amp;quality=all&amp;rerun=all&amp;page=1&amp;page_size=5&amp;q="' in response.text
+    assert 'href="/tasks?status=failed&amp;quality=all&amp;rerun=all&amp;page=3&amp;page_size=5&amp;q="' in response.text
     assert "job-page-06" in response.text
     assert "job-page-05" in response.text
     assert "job-page-11" not in response.text
@@ -1142,12 +1173,12 @@ def test_task_manager_stops_and_deletes_jobs(monkeypatch, tmp_path: Path):
     client = TestClient(app)
 
     stop_response = client.post(
-        "/tasks/job-stop-delete/stop?status=running&quality=missing&page=1&page_size=10&q=运行中 任务",
+        "/tasks/job-stop-delete/stop?status=running&quality=missing&rerun=available&page=1&page_size=10&q=运行中 任务",
         follow_redirects=False,
     )
 
     assert stop_response.status_code == 303
-    assert stop_response.headers["location"] == "/tasks?status=running&quality=missing&page=1&page_size=10&q=%E8%BF%90%E8%A1%8C%E4%B8%AD+%E4%BB%BB%E5%8A%A1"
+    assert stop_response.headers["location"] == "/tasks?status=running&quality=missing&rerun=available&page=1&page_size=10&q=%E8%BF%90%E8%A1%8C%E4%B8%AD+%E4%BB%BB%E5%8A%A1"
     stopped = repository.get("job-stop-delete")
     assert stopped is not None
     assert stopped["status"] == "stopped"
@@ -1159,19 +1190,144 @@ def test_task_manager_stops_and_deletes_jobs(monkeypatch, tmp_path: Path):
     assert "已提交停止请求" in stopped_detail.text
 
     delete_response = client.post(
-        "/tasks/job-stop-delete/delete?status=all&quality=missing&page=1&page_size=10&q=运行中 任务",
+        "/tasks/job-stop-delete/delete?status=all&quality=missing&rerun=available&page=1&page_size=10&q=运行中 任务",
         follow_redirects=False,
     )
 
     assert delete_response.status_code == 303
-    assert delete_response.headers["location"] == "/tasks?status=all&quality=missing&page=1&page_size=10&q=%E8%BF%90%E8%A1%8C%E4%B8%AD+%E4%BB%BB%E5%8A%A1"
+    assert delete_response.headers["location"] == "/tasks?status=all&quality=missing&rerun=available&page=1&page_size=10&q=%E8%BF%90%E8%A1%8C%E4%B8%AD+%E4%BB%BB%E5%8A%A1"
     assert repository.get("job-stop-delete") is None
 
 
-def test_task_manager_url_preserves_query():
-    url = _tasks_url(status="running", quality="failed", page=2, page_size=20, q="abc def")
+def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+    task_dir = tmp_path / ".omx" / "web-tasks"
+    task_dir.mkdir(parents=True)
+    done_task = task_dir / "task-batch-done.json"
+    done_task.write_text(
+        json.dumps({"task_id": "task-batch-done", "title": "可重跑任务"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    repository = SQLiteJobRepository(tmp_path / ".omx" / "orchestrator.db")
+    repository.create(
+        {
+            "job_id": "job-batch-running",
+            "status": "running",
+            "message": "running",
+            "task_path": "",
+            "run_id": "",
+        }
+    )
+    repository.create(
+        {
+            "job_id": "job-batch-done",
+            "status": "done",
+            "message": "done",
+            "task_path": str(done_task),
+            "run_id": "run-batch-done",
+        }
+    )
+    repository.create(
+        {
+            "job_id": "job-batch-failed",
+            "status": "failed",
+            "message": "failed",
+            "task_path": "",
+            "run_id": "run-batch-failed",
+        }
+    )
+    client = TestClient(app)
 
-    assert url == "/tasks?status=running&quality=failed&page=2&page_size=20&q=abc+def"
+    empty_response = client.post(
+        "/tasks/batch",
+        data={
+            "action": "stop",
+            "status": "all",
+            "quality": "all",
+            "rerun": "all",
+            "page": "1",
+            "page_size": "10",
+            "q": "",
+        },
+        follow_redirects=False,
+    )
+
+    assert empty_response.status_code == 303
+    assert "batch=" in empty_response.headers["location"]
+    assert "未选择任务" not in empty_response.headers["location"]
+    empty_detail = client.get(empty_response.headers["location"])
+    assert "未选择任务，未执行批量操作。" in empty_detail.text
+
+    stop_response = client.post(
+        "/tasks/batch",
+        data={
+            "action": "stop",
+            "job_ids": ["job-batch-running", "job-batch-done"],
+            "status": "running",
+            "quality": "missing",
+            "rerun": "available",
+            "page": "1",
+            "page_size": "10",
+            "q": "批量",
+        },
+        follow_redirects=False,
+    )
+
+    assert stop_response.status_code == 303
+    assert stop_response.headers["location"].startswith("/tasks?status=running&quality=missing&rerun=available")
+    assert repository.get("job-batch-running")["status"] == "stopped"
+    stopped_detail = client.get(stop_response.headers["location"])
+    assert "批量停止：成功 1 个，跳过 1 个，失败 0 个。" in stopped_detail.text
+
+    rerun_response = client.post(
+        "/tasks/batch",
+        data={
+            "action": "rerun",
+            "job_ids": ["job-batch-done", "job-batch-failed", "job-batch-running"],
+            "status": "all",
+            "quality": "all",
+            "rerun": "all",
+            "page": "1",
+            "page_size": "10",
+            "q": "",
+        },
+        follow_redirects=False,
+    )
+
+    assert rerun_response.status_code == 303
+    rerun_tasks = sorted(task_dir.glob("task-batch-done-rerun-*.json"))
+    assert len(rerun_tasks) == 1
+    rerun_detail = client.get(rerun_response.headers["location"])
+    assert "批量重新运行：成功 1 个，跳过 2 个，失败 0 个。" in rerun_detail.text
+
+    delete_response = client.post(
+        "/tasks/batch",
+        data={
+            "action": "delete",
+            "job_ids": ["job-batch-done", "job-batch-failed"],
+            "status": "all",
+            "quality": "all",
+            "rerun": "all",
+            "page": "1",
+            "page_size": "10",
+            "q": "",
+        },
+        follow_redirects=False,
+    )
+
+    assert delete_response.status_code == 303
+    assert repository.get("job-batch-done") is None
+    assert repository.get("job-batch-failed") is None
+    assert repository.get("job-batch-running") is not None
+    delete_detail = client.get(delete_response.headers["location"])
+    assert "批量删除：成功 2 个，跳过 0 个，失败 0 个。" in delete_detail.text
+
+
+def test_task_manager_url_preserves_query():
+    url = _tasks_url(status="running", quality="failed", rerun="available", page=2, page_size=20, q="abc def")
+
+    assert url == "/tasks?status=running&quality=failed&rerun=available&page=2&page_size=20&q=abc+def"
 
 
 def test_task_manager_tolerates_legacy_job_without_task_path(monkeypatch, tmp_path: Path):

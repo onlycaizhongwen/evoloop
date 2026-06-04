@@ -281,17 +281,21 @@ def task_manager(
     request: Request,
     status: str = "all",
     quality: str = "all",
+    rerun: str = "all",
     page: int = 1,
     page_size: int = 10,
     q: str = "",
+    batch: str = "",
 ):
     normalized_status = status if status in {"all", "running", "done", "failed", "stopped"} else "all"
     normalized_quality = quality if quality in {"all", "passed", "failed", "missing"} else "all"
+    normalized_rerun = rerun if rerun in {"all", "available", "unavailable"} else "all"
     normalized_page_size = min(max(page_size, 5), 50)
     query = q.strip()
     status_jobs = _load_task_manager_jobs(normalized_status)
     quality_counts = _count_task_manager_quality(status_jobs)
-    filtered_jobs = _filter_task_manager_jobs(status_jobs, normalized_quality, query)
+    rerun_counts = _count_task_manager_rerun(status_jobs)
+    filtered_jobs = _filter_task_manager_jobs(status_jobs, normalized_quality, normalized_rerun, query)
     total = len(filtered_jobs)
     total_pages = max(1, (total + normalized_page_size - 1) // normalized_page_size)
     current_page = min(max(page, 1), total_pages)
@@ -304,10 +308,13 @@ def task_manager(
             "jobs": enriched_jobs,
             "active_status": normalized_status,
             "active_quality": normalized_quality,
+            "active_rerun": normalized_rerun,
             "query": query,
+            "batch_notice": batch.strip(),
             "task_query": _tasks_query(
                 status=normalized_status,
                 quality=normalized_quality,
+                rerun=normalized_rerun,
                 page=current_page,
                 page_size=normalized_page_size,
                 q=query,
@@ -315,12 +322,14 @@ def task_manager(
             "task_query_first_page": _tasks_query(
                 status=normalized_status,
                 quality=normalized_quality,
+                rerun=normalized_rerun,
                 page=1,
                 page_size=normalized_page_size,
                 q=query,
             ),
             "counts": _count_jobs_by_status(),
             "quality_counts": quality_counts,
+            "rerun_counts": rerun_counts,
             "pagination": {
                 "page": current_page,
                 "page_size": normalized_page_size,
@@ -333,6 +342,7 @@ def task_manager(
                 "previous_query": _tasks_query(
                     status=normalized_status,
                     quality=normalized_quality,
+                    rerun=normalized_rerun,
                     page=max(1, current_page - 1),
                     page_size=normalized_page_size,
                     q=query,
@@ -340,6 +350,7 @@ def task_manager(
                 "next_query": _tasks_query(
                     status=normalized_status,
                     quality=normalized_quality,
+                    rerun=normalized_rerun,
                     page=min(total_pages, current_page + 1),
                     page_size=normalized_page_size,
                     q=query,
@@ -353,11 +364,59 @@ def task_manager(
     )
 
 
+@app.post("/tasks/batch")
+def batch_tasks(
+    action: Annotated[str, Form()],
+    job_ids: Annotated[list[str] | None, Form()] = None,
+    status: Annotated[str, Form()] = "all",
+    quality: Annotated[str, Form()] = "all",
+    rerun: Annotated[str, Form()] = "all",
+    page: Annotated[int, Form()] = 1,
+    page_size: Annotated[int, Form()] = 10,
+    q: Annotated[str, Form()] = "",
+):
+    selected_job_ids = _unique_safe_ids(job_ids or [])
+    if not selected_job_ids:
+        return _redirect_to_tasks_with_batch_notice(
+            "未选择任务，未执行批量操作。",
+            status=status,
+            quality=quality,
+            rerun=rerun,
+            page=page,
+            page_size=page_size,
+            q=q,
+        )
+
+    if action == "stop":
+        summary = _batch_stop_jobs(selected_job_ids)
+    elif action == "delete":
+        summary = _batch_delete_jobs(selected_job_ids)
+    elif action == "rerun":
+        summary = _batch_rerun_jobs(selected_job_ids)
+    else:
+        summary = {"label": "未知批量操作", "processed": 0, "skipped": len(selected_job_ids), "failed": 0}
+
+    notice = (
+        f"{summary['label']}：成功 {summary['processed']} 个，"
+        f"跳过 {summary['skipped']} 个，失败 {summary['failed']} 个。"
+    )
+    return _redirect_to_tasks_with_batch_notice(
+        notice,
+        status=status,
+        quality=quality,
+        rerun=rerun,
+        page=page,
+        page_size=page_size,
+        q=q,
+    )
+
+
 @app.post("/tasks/{job_id}/stop")
 def stop_task(
     job_id: str,
     status: str = "all",
     quality: str = "all",
+    rerun: str = "all",
     page: int = 1,
     page_size: int = 10,
     q: str = "",
@@ -377,7 +436,7 @@ def stop_task(
             finished_at=datetime.now().isoformat(),
         )
     return RedirectResponse(
-        url=_tasks_url(status=status, quality=quality, page=page, page_size=page_size, q=q),
+        url=_tasks_url(status=status, quality=quality, rerun=rerun, page=page, page_size=page_size, q=q),
         status_code=303,
     )
 
@@ -387,13 +446,14 @@ def delete_task(
     job_id: str,
     status: str = "all",
     quality: str = "all",
+    rerun: str = "all",
     page: int = 1,
     page_size: int = 10,
     q: str = "",
 ):
     _job_repository().delete(_safe_id(job_id))
     return RedirectResponse(
-        url=_tasks_url(status=status, quality=quality, page=page, page_size=page_size, q=q),
+        url=_tasks_url(status=status, quality=quality, rerun=rerun, page=page, page_size=page_size, q=q),
         status_code=303,
     )
 
@@ -848,8 +908,19 @@ def _count_task_manager_quality(jobs: list[dict[str, str]]) -> dict[str, int]:
     return counts
 
 
-def _filter_task_manager_jobs(jobs: list[dict[str, str]], quality: str, query: str) -> list[dict[str, str]]:
+def _count_task_manager_rerun(jobs: list[dict[str, str]]) -> dict[str, int]:
+    counts = {"all": len(jobs), "available": 0, "unavailable": 0}
+    for job in jobs:
+        if job.get("can_rerun"):
+            counts["available"] += 1
+        elif job.get("rerun_unavailable_reason"):
+            counts["unavailable"] += 1
+    return counts
+
+
+def _filter_task_manager_jobs(jobs: list[dict[str, str]], quality: str, rerun: str, query: str) -> list[dict[str, str]]:
     jobs = [job for job in jobs if _task_manager_quality_matches(job, quality)]
+    jobs = [job for job in jobs if _task_manager_rerun_matches(job, rerun)]
     if not query:
         return jobs
     needle = query.lower()
@@ -869,6 +940,89 @@ def _task_manager_quality_matches(job: dict[str, str], quality: str) -> bool:
     return True
 
 
+def _task_manager_rerun_matches(job: dict[str, str], rerun: str) -> bool:
+    if rerun == "all":
+        return True
+    if rerun == "available":
+        return bool(job.get("can_rerun"))
+    if rerun == "unavailable":
+        return bool(job.get("rerun_unavailable_reason"))
+    return True
+
+
+def _unique_safe_ids(values: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    safe_values: list[str] = []
+    for value in values:
+        safe_value = _safe_id(str(value))
+        if safe_value and safe_value not in seen:
+            seen.add(safe_value)
+            safe_values.append(safe_value)
+    return safe_values
+
+
+def _batch_stop_jobs(job_ids: list[str]) -> dict[str, int | str]:
+    processed = 0
+    skipped = 0
+    failed = 0
+    for job_id in job_ids:
+        job = _read_job(job_id)
+        if not job or str(job.get("status") or "") != "running":
+            skipped += 1
+            continue
+        try:
+            cancelled_running_process = WEB_CANCELLATION_REGISTRY.cancel(job_id)
+            _update_job(
+                job_id,
+                status="stopped",
+                message=(
+                    "底层命令已收到终止信号。"
+                    if cancelled_running_process
+                    else "已收到批量停止请求。当前没有可终止的底层命令，Web Job 状态已冻结。"
+                ),
+                finished_at=datetime.now().isoformat(),
+            )
+            processed += 1
+        except Exception:
+            failed += 1
+    return {"label": "批量停止", "processed": processed, "skipped": skipped, "failed": failed}
+
+
+def _batch_delete_jobs(job_ids: list[str]) -> dict[str, int | str]:
+    processed = 0
+    failed = 0
+    repository = _job_repository()
+    for job_id in job_ids:
+        try:
+            repository.delete(job_id)
+            processed += 1
+        except Exception:
+            failed += 1
+    return {"label": "批量删除", "processed": processed, "skipped": 0, "failed": failed}
+
+
+def _batch_rerun_jobs(job_ids: list[str]) -> dict[str, int | str]:
+    processed = 0
+    skipped = 0
+    failed = 0
+    for job_id in job_ids:
+        job = _read_job(job_id)
+        if not job or str(job.get("status") or "") == "running":
+            skipped += 1
+            continue
+        run_id = str(job.get("run_id") or "")
+        task_path = _task_path_for_job(job, run_id)
+        if not task_path:
+            skipped += 1
+            continue
+        try:
+            _rerun_task_path(task_path)
+            processed += 1
+        except Exception:
+            failed += 1
+    return {"label": "批量重新运行", "processed": processed, "skipped": skipped, "failed": failed}
+
+
 def _task_manager_job_matches(job: dict[str, str], needle: str) -> bool:
     haystack = " ".join(
         [
@@ -884,6 +1038,7 @@ def _task_manager_job_matches(job: dict[str, str], needle: str) -> bool:
             job.get("quality_reason", ""),
             job.get("review_issue_label", ""),
             job.get("review_issue_summary", ""),
+            job.get("rerun_unavailable_reason", ""),
             job.get("status", ""),
         ]
     ).lower()
@@ -1636,15 +1791,25 @@ def _count_jobs_by_status() -> dict[str, int]:
     return _job_repository().counts_by_status()
 
 
-def _tasks_query(*, status: str, page: int, page_size: int, q: str = "", quality: str = "all") -> str:
+def _tasks_query(
+    *,
+    status: str,
+    page: int,
+    page_size: int,
+    q: str = "",
+    quality: str = "all",
+    rerun: str = "all",
+) -> str:
     normalized_status = status if status in {"all", "running", "done", "failed", "stopped"} else "all"
     normalized_quality = quality if quality in {"all", "passed", "failed", "missing"} else "all"
+    normalized_rerun = rerun if rerun in {"all", "available", "unavailable"} else "all"
     normalized_page = max(page, 1)
     normalized_page_size = min(max(page_size, 5), 50)
     return urlencode(
         {
             "status": normalized_status,
             "quality": normalized_quality,
+            "rerun": normalized_rerun,
             "page": normalized_page,
             "page_size": normalized_page_size,
             "q": q.strip(),
@@ -1652,8 +1817,30 @@ def _tasks_query(*, status: str, page: int, page_size: int, q: str = "", quality
     )
 
 
-def _tasks_url(*, status: str, page: int, page_size: int, q: str = "", quality: str = "all") -> str:
-    return f"/tasks?{_tasks_query(status=status, quality=quality, page=page, page_size=page_size, q=q)}"
+def _tasks_url(
+    *,
+    status: str,
+    page: int,
+    page_size: int,
+    q: str = "",
+    quality: str = "all",
+    rerun: str = "all",
+) -> str:
+    return f"/tasks?{_tasks_query(status=status, quality=quality, rerun=rerun, page=page, page_size=page_size, q=q)}"
+
+
+def _redirect_to_tasks_with_batch_notice(
+    notice: str,
+    *,
+    status: str,
+    quality: str,
+    rerun: str,
+    page: int,
+    page_size: int,
+    q: str,
+) -> RedirectResponse:
+    url = _tasks_url(status=status, quality=quality, rerun=rerun, page=page, page_size=page_size, q=q)
+    return RedirectResponse(url=f"{url}&{urlencode({'batch': notice})}", status_code=303)
 
 
 def _list_task_templates_with_recent_jobs(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:

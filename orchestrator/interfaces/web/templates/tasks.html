@@ -28,23 +28,23 @@
       </header>
 
       <section class="summary-grid">
-        <a class="metric task-filter {% if active_status == 'all' %}active{% endif %}" href="/tasks?status=all&quality={{ active_quality }}&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
+        <a class="metric task-filter {% if active_status == 'all' %}active{% endif %}" href="/tasks?status=all&quality={{ active_quality }}&rerun={{ active_rerun }}&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
           <span>全部</span>
           <strong>{{ counts.all }}</strong>
         </a>
-        <a class="metric task-filter {% if active_status == 'running' %}active{% endif %}" href="/tasks?status=running&quality={{ active_quality }}&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
+        <a class="metric task-filter {% if active_status == 'running' %}active{% endif %}" href="/tasks?status=running&quality={{ active_quality }}&rerun={{ active_rerun }}&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
           <span>运行中</span>
           <strong>{{ counts.running }}</strong>
         </a>
-        <a class="metric task-filter {% if active_status == 'done' %}active{% endif %}" href="/tasks?status=done&quality={{ active_quality }}&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
+        <a class="metric task-filter {% if active_status == 'done' %}active{% endif %}" href="/tasks?status=done&quality={{ active_quality }}&rerun={{ active_rerun }}&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
           <span>已完成</span>
           <strong>{{ counts.done }}</strong>
         </a>
-        <a class="metric task-filter {% if active_status == 'failed' %}active{% endif %}" href="/tasks?status=failed&quality={{ active_quality }}&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
+        <a class="metric task-filter {% if active_status == 'failed' %}active{% endif %}" href="/tasks?status=failed&quality={{ active_quality }}&rerun={{ active_rerun }}&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
           <span>失败</span>
           <strong>{{ counts.failed }}</strong>
         </a>
-        <a class="metric task-filter {% if active_status == 'stopped' %}active{% endif %}" href="/tasks?status=stopped&quality={{ active_quality }}&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
+        <a class="metric task-filter {% if active_status == 'stopped' %}active{% endif %}" href="/tasks?status=stopped&quality={{ active_quality }}&rerun={{ active_rerun }}&page=1&page_size={{ pagination.page_size }}&q={{ query | urlencode }}">
           <span>已停止</span>
           <strong>{{ counts.stopped }}</strong>
         </a>
@@ -62,6 +62,13 @@
       </section>
       {% endif %}
 
+      {% if batch_notice %}
+      <section class="alert info">
+        <strong>批量操作结果</strong>
+        <span>{{ batch_notice }}</span>
+      </section>
+      {% endif %}
+
       <section class="panel">
         <div class="section-title compact">
           <h2>任务列表</h2>
@@ -72,7 +79,6 @@
           <label>搜索
             <input name="q" value="{{ query }}" placeholder="任务名称、Task ID、Job ID、Run ID、模板">
           </label>
-          <label>每页
           <label>Quality
             <select name="quality">
               <option value="all" {% if active_quality == "all" %}selected{% endif %}>All ({{ quality_counts.all }})</option>
@@ -81,6 +87,14 @@
               <option value="missing" {% if active_quality == "missing" %}selected{% endif %}>Missing ({{ quality_counts.missing }})</option>
             </select>
           </label>
+          <label>Rerun
+            <select name="rerun">
+              <option value="all" {% if active_rerun == "all" %}selected{% endif %}>All ({{ rerun_counts.all }})</option>
+              <option value="available" {% if active_rerun == "available" %}selected{% endif %}>Available ({{ rerun_counts.available }})</option>
+              <option value="unavailable" {% if active_rerun == "unavailable" %}selected{% endif %}>Unavailable ({{ rerun_counts.unavailable }})</option>
+            </select>
+          </label>
+          <label>每页
             <select name="page_size">
               {% for option in [5, 10, 20, 50] %}
               <option value="{{ option }}" {% if pagination.page_size == option %}selected{% endif %}>{{ option }}</option>
@@ -90,13 +104,32 @@
           <input type="hidden" name="page" value="1">
           <div class="toolbar-actions">
             <button type="submit">查询</button>
-            <a class="button secondary" href="/tasks?status={{ active_status }}&quality=all&page=1&page_size={{ pagination.page_size }}">清空</a>
+            <a class="button secondary" href="/tasks?status={{ active_status }}&quality=all&rerun=all&page=1&page_size={{ pagination.page_size }}">清空</a>
+          </div>
+        </form>
+        <form id="task-batch-form" class="task-toolbar" method="post" action="/tasks/batch">
+          <input type="hidden" name="status" value="{{ active_status }}">
+          <input type="hidden" name="quality" value="{{ active_quality }}">
+          <input type="hidden" name="rerun" value="{{ active_rerun }}">
+          <input type="hidden" name="page" value="{{ pagination.page }}">
+          <input type="hidden" name="page_size" value="{{ pagination.page_size }}">
+          <input type="hidden" name="q" value="{{ query }}">
+          <label>批量操作
+            <select name="action">
+              <option value="stop">停止运行中任务</option>
+              <option value="rerun">重新运行可重跑任务</option>
+              <option value="delete">删除任务记录</option>
+            </select>
+          </label>
+          <div class="toolbar-actions">
+            <button type="submit" class="secondary" data-confirm="确认对已勾选任务执行批量操作？删除只移除任务记录，run 目录和审计日志会保留。">执行</button>
           </div>
         </form>
         <div class="task-table-wrap">
           <table class="task-table">
             <thead>
               <tr>
+                <th><input type="checkbox" data-select-all-tasks aria-label="选择当前页全部任务"></th>
                 <th>任务名称</th>
                 <th>Job ID</th>
                 <th>Run ID</th>
@@ -111,6 +144,7 @@
             <tbody>
               {% for job in jobs %}
               <tr>
+                <td><input type="checkbox" form="task-batch-form" name="job_ids" value="{{ job.job_id }}" aria-label="选择 {{ job.job_id }}"></td>
                 <td>
                   <strong>{{ job.task_name }}</strong>
                   {% if job.task_id %}<span class="muted-line">{{ job.task_id }}</span>{% endif %}
@@ -164,7 +198,7 @@
               </tr>
               {% else %}
               <tr>
-                <td colspan="9" class="empty-cell">暂无任务记录。</td>
+                <td colspan="10" class="empty-cell">暂无任务记录。</td>
               </tr>
               {% endfor %}
             </tbody>
@@ -356,6 +390,13 @@
         if (!window.confirm(button.dataset.confirm)) {
           event.preventDefault();
         }
+      });
+    });
+    document.querySelectorAll("[data-select-all-tasks]").forEach((checkbox) => {
+      checkbox.addEventListener("change", () => {
+        document.querySelectorAll('input[name="job_ids"][form="task-batch-form"]').forEach((jobCheckbox) => {
+          jobCheckbox.checked = checkbox.checked;
+        });
       });
     });
     document.querySelectorAll(".task-create-form").forEach((form) => {

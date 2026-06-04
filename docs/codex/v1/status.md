@@ -268,3 +268,21 @@
 - 文档产物：新增 `docs/codex/v1/plans/demo-readiness.md`，README 已补齐常用链接、目录、阅读路径、Web 页面入口、演示前检查清单、最近真实演示摘要、Mermaid 架构图和自动循环流程图。
 - 当前验证基线：`python -m pytest -q tests/test_web_ui.py` 为 `48 passed`；`python -m pytest -q` 为 `133 passed`。
 - 当前结论：Evoloop 本地真实演示链路可用，可用于对外演讲和技术评审；后续建议围绕演示稳定性、UI 细节和真实 Codex/OMX 环境依赖继续增强。
+
+# 2026-06-04 Web UI Task Manager Rerun Filter
+
+- 状态：已完成。
+- 摘要：任务管理页新增 `Rerun` 筛选，可按全部、可重新运行、不可重新运行过滤任务；筛选状态会在分页、停止和删除操作中保留。
+- 搜索增强：任务列表搜索现在包含不可重新运行原因，例如 `缺少原始 task.json`。
+- 产物：`orchestrator/interfaces/web/main.py`、`orchestrator/interfaces/web/templates/tasks.html`、`tests/test_web_ui.py`、`docs/codex/v1/plans/web-ui-task-template-management.md`。
+- 验证：`python -m pytest -q tests/test_web_ui.py -k "task_manager"` 通过，`5 passed, 46 deselected`；`python -m py_compile orchestrator/interfaces/web/main.py` 通过；`python -m pytest -q tests/test_web_ui.py` 通过，`51 passed`；`python -m pytest -q` 通过，`136 passed`。
+- Trace：`docs/codex/v1/trace/web-ui-task-manager-rerun-filter-trace.md`，结论为计划、实现、测试和状态记录已闭环，未发现未对齐项。
+
+# 2026-06-04 Web UI Task Manager Batch Operations
+
+- 状态：已完成。
+- 摘要：任务管理页新增当前页批量选择和批量操作，支持停止运行中任务、重新运行可重跑任务、删除 Web Job 记录，并显示成功/跳过/失败数量。
+- 安全边界：批量删除只移除 Web Job 记录，不删除 run 目录和审计日志；批量重新运行跳过 running Job 和缺少原始 `task.json` 的 Job。
+- 产物：`orchestrator/interfaces/web/main.py`、`orchestrator/interfaces/web/templates/tasks.html`、`tests/test_web_ui.py`、`docs/codex/v1/plans/web-ui-task-template-management.md`。
+- 验证：`python -m pytest -q tests/test_web_ui.py -k "task_manager"` 通过，`6 passed, 46 deselected`；`python -m py_compile orchestrator/interfaces/web/main.py` 通过；`python -m pytest -q tests/test_web_ui.py` 通过，`52 passed`；`python -m pytest -q` 通过，`137 passed`；渲染 `/tasks` 返回 200，页面包含批量表单、全选控件、`/tasks/batch` endpoint 和全选 JS 绑定；本地 Uvicorn smoke `http://127.0.0.1:8767/tasks` 返回 200，并包含同一组任务管理控件；非破坏性 `POST /tasks/batch` 未选择任务时返回 303 到已编码的 `batch=` 提示，回跳页显示 `未选择任务，未执行批量操作。`。
+- Trace：`docs/codex/v1/trace/web-ui-task-manager-batch-operations-trace.md`，结论为计划、实现、测试和状态记录已闭环，未发现未对齐项。
