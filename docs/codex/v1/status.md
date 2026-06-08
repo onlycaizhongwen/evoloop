@@ -365,3 +365,9 @@
 - 摘要：`/tasks/audit.md` 导出顶部新增 Records、Processed jobs、Skipped jobs、Failed jobs 汇总，便于直接判断当前导出证据覆盖范围和异常数量；汇总基于当前筛选后的记录计算。
 - 产物：`orchestrator/interfaces/web/main.py`、`tests/test_web_ui.py`。
 - 验证：`python -m pytest -q tests/test_web_ui.py -k "task_manager or audit"` 通过，`8 passed, 44 deselected`；`python -m py_compile orchestrator/interfaces/web/main.py` 通过；`python -m pytest -q tests/test_web_ui.py` 通过，`52 passed`；`python -m pytest -q` 通过，`137 passed`；`git diff --check` 通过。
+# 2026-06-08 Web UI Task Manager Audit Write Failure Logging
+
+- 状态：已完成。
+- 摘要：`_append_web_job_audit()` 在审计 JSONL 写入发生 `OSError` 时会写入 Web 模块 warning 日志并保留异常栈，同时继续保持任务 stop/delete/rerun 操作不被审计文件临时不可写阻断；非 `OSError` 不再被宽泛吞掉。
+- 产物：`orchestrator/interfaces/web/main.py`、`tests/test_web_ui.py`。
+- 验证：`python -m pytest -q tests/test_web_ui.py -k "task_manager or audit"` 通过，`9 passed, 44 deselected`；`python -m py_compile orchestrator/interfaces/web/main.py` 通过。

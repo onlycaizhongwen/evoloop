@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import json
+import logging
 import subprocess
 import sqlite3
 import sys
@@ -15,6 +16,7 @@ from orchestrator.domain.models.patch_plan import PatchApplyResult, PatchPlan
 from orchestrator.domain.models.run_state import RunState
 from orchestrator.infrastructure.patches.patch_approval import PendingPatchWriter
 from orchestrator.infrastructure.persistence.sqlite_job_repository import SQLiteJobRepository
+from orchestrator.interfaces.web import main as web_main
 from orchestrator.interfaces.web.main import _tasks_url, app
 
 
@@ -1203,6 +1205,36 @@ def test_task_manager_stops_and_deletes_jobs(monkeypatch, tmp_path: Path):
     assert delete_event["event_type"] == "single_delete"
     assert delete_event["processed_job_ids"] == ["job-stop-delete"]
     assert delete_event["details"]["deleted_job"]["job_id"] == "job-stop-delete"
+
+
+def test_task_manager_logs_audit_write_failure_without_blocking(monkeypatch, tmp_path: Path, caplog):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+    repository = SQLiteJobRepository(tmp_path / ".omx" / "orchestrator.db")
+    repository.create(
+        {
+            "job_id": "job-audit-unwritable",
+            "status": "running",
+            "message": "running",
+            "task_path": "",
+            "run_id": "",
+        }
+    )
+
+    def fail_append(self, event):
+        raise OSError("audit path is unavailable")
+
+    monkeypatch.setattr(web_main.WebJobAuditLog, "append", fail_append)
+    caplog.set_level(logging.WARNING, logger=web_main.LOGGER.name)
+
+    response = TestClient(app).post("/tasks/job-audit-unwritable/stop", follow_redirects=False)
+
+    assert response.status_code == 303
+    stopped = repository.get("job-audit-unwritable")
+    assert stopped is not None
+    assert stopped["status"] == "stopped"
+    assert "Failed to append web job audit event event_type=single_stop" in caplog.text
+    assert "audit path is unavailable" in caplog.text
 
 
 def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):

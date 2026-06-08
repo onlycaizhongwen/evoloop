@@ -29,3 +29,10 @@
 ## 错误记录
 
 - 暂无。
+## 2026-06-08 Audit Write Failure Logging
+
+- Current stage: completed incremental hardening.
+- Change: `_append_web_job_audit()` now catches only `OSError`, logs a warning with `exc_info=True`, and keeps task operations non-blocking when the audit file is temporarily unavailable.
+- Tests: added `test_task_manager_logs_audit_write_failure_without_blocking`, which monkeypatches `WebJobAuditLog.append` to raise `OSError`, verifies the stop operation still redirects, the job becomes `stopped`, and the warning includes the failure.
+- Validation so far: `python -m pytest -q tests/test_web_ui.py -k "task_manager or audit"` passed with 9 passed, 44 deselected; `python -m py_compile orchestrator/interfaces/web/main.py` passed.
+- Remaining work: run broader regression, `git diff --check`, commit with Lore trailers, and push.

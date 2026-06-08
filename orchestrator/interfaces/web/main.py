@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import shlex
 import threading
@@ -61,6 +62,7 @@ ALLOWED_DOCKER_WORKTREE_MOUNTS = {"readonly", "rw"}
 MEMORY_LIMIT_PATTERN = re.compile(r"^\d+(?:\.\d+)?[kKmMgG]?$")
 WINDOWS_ABSOLUTE_PATH_PATTERN = re.compile(r"(^|[\s\"'])([A-Za-z]:[\\/][^\s\"']*)")
 ALLOWED_DOCKER_ABSOLUTE_PATH_PREFIXES = ("/worktree", "/run", "/cache")
+LOGGER = logging.getLogger(__name__)
 
 app = FastAPI(title="Auto Evolution Orchestrator")
 app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="static")
@@ -2109,8 +2111,14 @@ def _append_batch_web_job_audit(
 def _append_web_job_audit(event: WebJobAuditEvent) -> None:
     try:
         WebJobAuditLog(WEB_JOB_AUDIT_PATH).append(event)
-    except Exception:
+    except OSError:
         # Task operations should remain available even if the audit file is temporarily unwritable.
+        LOGGER.warning(
+            "Failed to append web job audit event event_type=%s path=%s",
+            event.event_type,
+            WEB_JOB_AUDIT_PATH,
+            exc_info=True,
+        )
         return
 
 

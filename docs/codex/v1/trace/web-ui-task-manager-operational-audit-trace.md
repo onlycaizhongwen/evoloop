@@ -81,3 +81,9 @@
 - `/tasks/audit.md` 导出顶部新增 Records、Processed jobs、Skipped jobs、Failed jobs 汇总。
 - 汇总基于当前筛选后的记录计算，默认导出和筛选导出都能直接看到覆盖记录数与异常数量。
 - 新增测试覆盖默认导出和 `outcome=skipped` 筛选导出的汇总计数。
+## 2026-06-08 审计写入失败日志增量
+
+- `_append_web_job_audit()` 现在只捕获审计落盘相关的 `OSError`，并通过 Web 模块 logger 写入 warning 与异常栈。
+- 写入失败仍不阻断任务管理操作，保持可用性优先；新增测试通过 monkeypatch 模拟审计 append 失败，验证 stop 操作仍返回 303 且 Job 状态更新为 `stopped`。
+- 原“审计写入失败静默忽略”风险已收口为“审计写入失败可在服务日志中观测”；剩余风险仍为 JSONL 暂未轮转。
+- 增量验证：`python -m pytest -q tests/test_web_ui.py -k "task_manager or audit"`：9 passed, 44 deselected；`python -m py_compile orchestrator/interfaces/web/main.py`：通过。
