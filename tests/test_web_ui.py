@@ -1403,6 +1403,15 @@ def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
     assert 'name="q" value="missing task.json"' in reason_search_page.text
     assert "batch_rerun" in reason_search_page.text
 
+    empty_filter_page = client.get("/tasks/audit?event_type=batch_delete&outcome=skipped&q=missing+task.json")
+    assert empty_filter_page.status_code == 200
+    assert "0 / 3" in empty_filter_page.text
+    assert "当前筛选没有匹配的审计记录" in empty_filter_page.text
+    assert "事件类型: batch_delete" in empty_filter_page.text
+    assert "结果: Has skipped" in empty_filter_page.text
+    assert "搜索: missing task.json" in empty_filter_page.text
+    assert 'href="/tasks/audit">清空筛选</a>' in empty_filter_page.text
+
     job_search_page = client.get("/tasks/audit?q=job-batch-failed")
     assert job_search_page.status_code == 200
     assert "batch_delete" in job_search_page.text

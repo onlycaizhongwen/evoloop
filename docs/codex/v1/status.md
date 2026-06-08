@@ -337,3 +337,10 @@
 - 摘要：`/tasks/audit` 新增结果筛选，支持按全部、存在跳过、存在失败、无跳过且无失败查看最近任务操作审计记录；非法 `outcome` 会回退到 `all`。
 - 产物：`orchestrator/interfaces/web/main.py`、`orchestrator/interfaces/web/templates/task_audit.html`、`tests/test_web_ui.py`。
 - 验证：`python -m pytest -q tests/test_web_ui.py -k "task_manager or audit"` 通过，`8 passed, 44 deselected`；`python -m py_compile orchestrator/interfaces/web/main.py` 通过；`python -m pytest -q tests/test_web_ui.py` 通过，`52 passed`；`python -m pytest -q` 通过，`137 passed`；`git diff --check` 通过。
+
+# 2026-06-08 Web UI Task Manager Audit Empty Filter Hint
+
+- 状态：已完成。
+- 摘要：`/tasks/audit` 在存在审计记录但当前事件类型、结果和搜索组合无命中时，会显示当前筛选条件摘要和清空筛选入口，区分“无审计记录”和“筛选无结果”。
+- 产物：`orchestrator/interfaces/web/main.py`、`orchestrator/interfaces/web/templates/task_audit.html`、`tests/test_web_ui.py`。
+- 验证：`python -m pytest -q tests/test_web_ui.py -k "task_manager or audit"` 通过，`8 passed, 44 deselected`；`python -m py_compile orchestrator/interfaces/web/main.py` 通过；`python -m pytest -q tests/test_web_ui.py` 通过，`52 passed`；`python -m pytest -q` 通过，`137 passed`；`git diff --check` 通过。

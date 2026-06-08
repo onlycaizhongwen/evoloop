@@ -390,9 +390,19 @@ def task_manager_audit_page(
     active_event_type = event_type if event_type == "all" or event_type in event_types else "all"
     filtered_records = _filter_task_manager_audit_records(records, active_event_type)
     active_outcome = outcome if outcome in {"all", "skipped", "failed", "clean"} else "all"
+    outcome_options = [
+        {"value": "all", "label": "All"},
+        {"value": "skipped", "label": "Has skipped"},
+        {"value": "failed", "label": "Has failed"},
+        {"value": "clean", "label": "No skipped or failed"},
+    ]
+    active_outcome_label = next(
+        option["label"] for option in outcome_options if option["value"] == active_outcome
+    )
     filtered_records = _filter_task_manager_audit_records_by_outcome(filtered_records, active_outcome)
     query = q.strip()
     filtered_records = _search_task_manager_audit_records(filtered_records, query)
+    active_filters = _task_manager_audit_active_filters(active_event_type, active_outcome, active_outcome_label, query)
     return TEMPLATES.TemplateResponse(
         request,
         "task_audit.html",
@@ -403,12 +413,8 @@ def task_manager_audit_page(
             "event_types": event_types,
             "active_event_type": active_event_type,
             "active_outcome": active_outcome,
-            "outcome_options": [
-                {"value": "all", "label": "All"},
-                {"value": "skipped", "label": "Has skipped"},
-                {"value": "failed", "label": "Has failed"},
-                {"value": "clean", "label": "No skipped or failed"},
-            ],
+            "outcome_options": outcome_options,
+            "active_filters": active_filters,
             "query": query,
             "limit": active_limit,
             "limit_options": [25, 50, 100, 200],
@@ -2182,6 +2188,22 @@ def _filter_task_manager_audit_records_by_outcome(records: list[dict[str, Any]],
             if not record.get("skipped_job_ids") and not record.get("failed_job_ids")
         ]
     return records
+
+
+def _task_manager_audit_active_filters(
+    event_type: str,
+    outcome: str,
+    outcome_label: str,
+    query: str,
+) -> list[str]:
+    filters: list[str] = []
+    if event_type != "all":
+        filters.append(f"事件类型: {event_type}")
+    if outcome != "all":
+        filters.append(f"结果: {outcome_label}")
+    if query:
+        filters.append(f"搜索: {query}")
+    return filters
 
 
 def _search_task_manager_audit_records(records: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:

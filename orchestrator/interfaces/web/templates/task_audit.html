@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>任务操作审计</title>
-  <link rel="stylesheet" href="/static/styles.css?v=task-audit-20260608-outcome">
+  <link rel="stylesheet" href="/static/styles.css?v=task-audit-20260608-empty-filter">
 </head>
 <body>
   <main class="app-layout">
@@ -102,7 +102,14 @@
               </tr>
               {% else %}
               <tr>
-                <td colspan="6" class="empty-cell">暂无任务操作审计记录。</td>
+                <td colspan="6" class="empty-cell">
+                  {% if total and active_filters %}
+                  当前筛选没有匹配的审计记录：{{ active_filters | join("；") }}。
+                  <a href="/tasks/audit">清空筛选</a>
+                  {% else %}
+                  暂无任务操作审计记录。
+                  {% endif %}
+                </td>
               </tr>
               {% endfor %}
             </tbody>

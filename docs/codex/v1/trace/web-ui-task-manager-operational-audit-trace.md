@@ -55,3 +55,10 @@
 - `skipped` 匹配存在 `skipped_job_ids` 的记录，`failed` 匹配存在 `failed_job_ids` 的记录，`clean` 匹配无跳过且无失败的记录。
 - 非法 `outcome` 回退到 `all`；筛选发生在读取最近记录之后、关键字搜索之前，不修改 JSONL 审计文件。
 - 新增测试覆盖存在跳过、无跳过失败和非法结果回退。
+
+## 2026-06-08 审计空筛选提示增量
+
+- `/tasks/audit` 在 `total > 0` 且当前筛选组合无命中时，显示事件类型、结果和搜索词摘要，并提供清空筛选入口。
+- 无审计记录时仍显示原始空状态，避免把“没有任何审计事件”和“筛选后无结果”混淆。
+- 新增测试覆盖 `event_type=batch_delete`、`outcome=skipped`、`q=missing task.json` 的无命中组合。
+- 该增量只影响页面展示，不修改 JSONL 审计写入、读取数量、Markdown 导出或删除边界。
