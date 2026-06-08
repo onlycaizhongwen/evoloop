@@ -391,9 +391,11 @@
 - Status: completed.
 - Summary: `/tasks/health` now provides a read-only Demo Readiness page, and `/tasks/health.json` exposes the same evidence for scripts. They check SQLite Web Job DB access, audit log readability, template examples, web static assets, required templates, and Docker command presets. Missing audit logs and absent DBs are warnings, corrupt audit lines are reported without blocking, and a missing examples directory is a failure.
 - Read-only guardrail: the health endpoint uses read-only SQLite opening and direct file reads, and tests verify it does not create `.omx`, audit logs, run directories, or job records when the workspace has not produced them.
+- Smoke: `scripts/run_demo_readiness_smoke.py` seeds an isolated `.tmp/demo-readiness-smoke` workspace, calls `/tasks/health.json`, prints each check, and exits non-zero unless the overall summary is `pass`.
 - Artifacts: `orchestrator/interfaces/web/main.py`, `orchestrator/interfaces/web/templates/task_health.html`, `orchestrator/interfaces/web/templates/tasks.html`, `orchestrator/interfaces/web/templates/task_audit.html`, `tests/test_web_ui.py`, `docs/codex/v1/trace/web-ui-operational-maintenance-hardening-trace.md`.
 - Verification so far: `python -m py_compile orchestrator/interfaces/web/main.py` passed; `python -m pytest -q tests/test_web_ui.py -k "health"` passed with `4 passed, 54 deselected`; `python -m pytest -q tests/test_web_ui.py -k "task_manager or audit or health"` passed with `14 passed, 44 deselected`.
 - JSON endpoint verification: `python -m pytest -q tests/test_web_ui.py -k "health"` passed with `5 passed, 54 deselected`.
+- Smoke verification: `python -m py_compile scripts/run_demo_readiness_smoke.py` passed; `python scripts/run_demo_readiness_smoke.py` passed with `demo_readiness_smoke=passed`; `python -m pytest -q tests/test_demo_readiness_smoke.py` passed with `1 passed`.
 
 # 2026-06-08 Web UI Audit Log Retention And Rotation
 
