@@ -69,3 +69,9 @@
 - `/tasks/audit` 的 `导出 Markdown` 链接会保留当前筛选条件；无筛选时仍输出原始 `/tasks/audit.md` 链接。
 - 无命中筛选导出仍返回合法 Markdown 空结果，不修改 JSONL 审计文件，也不改变默认 Markdown 导出的 50 条语义。
 - 新增测试覆盖筛选页导出链接、按 outcome 导出的 Markdown 内容和无命中筛选导出。
+
+## 2026-06-08 Markdown 筛选摘要增量
+
+- `/tasks/audit.md` 导出顶部新增 `Filters` 行；默认导出显示 `all`，筛选导出显示事件类型、结果和搜索词摘要。
+- 筛选摘要来自请求过滤条件，不写入 JSONL 审计记录；导出内容和页面筛选语义保持一致。
+- 新增测试覆盖默认导出、按 outcome 导出和无命中组合导出的 Filters 行。

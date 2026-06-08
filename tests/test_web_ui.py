@@ -1343,6 +1343,7 @@ def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
     assert audit_response.status_code == 200
     assert audit_response.headers["content-disposition"] == 'attachment; filename="task-manager-audit.md"'
     assert "# Task Manager Audit" in audit_response.text
+    assert "- Filters: all" in audit_response.text
     assert "batch_delete" in audit_response.text
     assert "job-batch-done" in audit_response.text
 
@@ -1375,6 +1376,7 @@ def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
 
     skipped_audit_export = client.get("/tasks/audit.md?outcome=skipped")
     assert skipped_audit_export.status_code == 200
+    assert "- Filters: 结果: Has skipped" in skipped_audit_export.text
     assert "batch_stop" in skipped_audit_export.text
     assert "batch_rerun" in skipped_audit_export.text
     assert "batch_delete" not in skipped_audit_export.text
@@ -1425,6 +1427,7 @@ def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
 
     empty_filter_export = client.get("/tasks/audit.md?event_type=batch_delete&outcome=skipped&q=missing+task.json")
     assert empty_filter_export.status_code == 200
+    assert "- Filters: 事件类型: batch_delete; 结果: Has skipped; 搜索: missing task.json" in empty_filter_export.text
     assert "No task manager audit events recorded." in empty_filter_export.text
 
     job_search_page = client.get("/tasks/audit?q=job-batch-failed")

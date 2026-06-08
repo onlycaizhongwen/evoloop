@@ -368,7 +368,7 @@ def task_manager(
 
 @app.get("/tasks/audit.md")
 def task_manager_audit_markdown(event_type: str = "all", outcome: str = "all", q: str = "", limit: int = 50):
-    records, _total, _event_types, _active_event_type, _active_outcome, _query, _active_filters = (
+    records, _total, _event_types, _active_event_type, _active_outcome, _query, active_filters = (
         _filtered_task_manager_audit_records(
             event_type,
             outcome,
@@ -377,7 +377,7 @@ def task_manager_audit_markdown(event_type: str = "all", outcome: str = "all", q
         )
     )
     return PlainTextResponse(
-        _build_task_manager_audit_markdown(records),
+        _build_task_manager_audit_markdown(records, active_filters=active_filters),
         media_type="text/markdown",
         headers={"Content-Disposition": 'attachment; filename="task-manager-audit.md"'},
     )
@@ -2140,8 +2140,9 @@ def _job_run_ids(jobs: Iterable[dict[str, Any] | None]) -> list[str]:
     return run_ids
 
 
-def _build_task_manager_audit_markdown(records: list[dict[str, Any]]) -> str:
-    lines = ["# Task Manager Audit", ""]
+def _build_task_manager_audit_markdown(records: list[dict[str, Any]], active_filters: list[str] | None = None) -> str:
+    filters = active_filters or []
+    lines = ["# Task Manager Audit", "", f"- Filters: {'; '.join(filters) if filters else 'all'}", ""]
     if not records:
         lines.append("No task manager audit events recorded.")
         return "\n".join(lines) + "\n"
