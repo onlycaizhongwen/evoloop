@@ -2142,7 +2142,19 @@ def _job_run_ids(jobs: Iterable[dict[str, Any] | None]) -> list[str]:
 
 def _build_task_manager_audit_markdown(records: list[dict[str, Any]], active_filters: list[str] | None = None) -> str:
     filters = active_filters or []
-    lines = ["# Task Manager Audit", "", f"- Filters: {'; '.join(filters) if filters else 'all'}", ""]
+    processed_total = sum(len(list(record.get("processed_job_ids") or [])) for record in records)
+    skipped_total = sum(len(list(record.get("skipped_job_ids") or [])) for record in records)
+    failed_total = sum(len(list(record.get("failed_job_ids") or [])) for record in records)
+    lines = [
+        "# Task Manager Audit",
+        "",
+        f"- Filters: {'; '.join(filters) if filters else 'all'}",
+        f"- Records: {len(records)}",
+        f"- Processed jobs: {processed_total}",
+        f"- Skipped jobs: {skipped_total}",
+        f"- Failed jobs: {failed_total}",
+        "",
+    ]
     if not records:
         lines.append("No task manager audit events recorded.")
         return "\n".join(lines) + "\n"

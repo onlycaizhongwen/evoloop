@@ -358,3 +358,10 @@
 - 摘要：`/tasks/audit.md` 导出内容顶部新增 Filters 行；无筛选时标记 `all`，带筛选时写入事件类型、结果和搜索词摘要，便于导出的审计证据离开页面后仍能识别范围。
 - 产物：`orchestrator/interfaces/web/main.py`、`tests/test_web_ui.py`。
 - 验证：`python -m pytest -q tests/test_web_ui.py -k "task_manager or audit"` 通过，`8 passed, 44 deselected`；`python -m py_compile orchestrator/interfaces/web/main.py` 通过；`python -m pytest -q tests/test_web_ui.py` 通过，`52 passed`；`python -m pytest -q` 通过，`137 passed`；`git diff --check` 通过。
+
+# 2026-06-08 Web UI Task Manager Audit Markdown Summary Counts
+
+- 状态：已完成。
+- 摘要：`/tasks/audit.md` 导出顶部新增 Records、Processed jobs、Skipped jobs、Failed jobs 汇总，便于直接判断当前导出证据覆盖范围和异常数量；汇总基于当前筛选后的记录计算。
+- 产物：`orchestrator/interfaces/web/main.py`、`tests/test_web_ui.py`。
+- 验证：`python -m pytest -q tests/test_web_ui.py -k "task_manager or audit"` 通过，`8 passed, 44 deselected`；`python -m py_compile orchestrator/interfaces/web/main.py` 通过；`python -m pytest -q tests/test_web_ui.py` 通过，`52 passed`；`python -m pytest -q` 通过，`137 passed`；`git diff --check` 通过。

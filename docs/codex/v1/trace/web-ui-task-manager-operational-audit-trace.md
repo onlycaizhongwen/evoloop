@@ -75,3 +75,9 @@
 - `/tasks/audit.md` 导出顶部新增 `Filters` 行；默认导出显示 `all`，筛选导出显示事件类型、结果和搜索词摘要。
 - 筛选摘要来自请求过滤条件，不写入 JSONL 审计记录；导出内容和页面筛选语义保持一致。
 - 新增测试覆盖默认导出、按 outcome 导出和无命中组合导出的 Filters 行。
+
+## 2026-06-08 Markdown 汇总计数增量
+
+- `/tasks/audit.md` 导出顶部新增 Records、Processed jobs、Skipped jobs、Failed jobs 汇总。
+- 汇总基于当前筛选后的记录计算，默认导出和筛选导出都能直接看到覆盖记录数与异常数量。
+- 新增测试覆盖默认导出和 `outcome=skipped` 筛选导出的汇总计数。

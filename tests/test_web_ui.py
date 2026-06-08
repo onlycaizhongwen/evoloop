@@ -1344,6 +1344,10 @@ def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
     assert audit_response.headers["content-disposition"] == 'attachment; filename="task-manager-audit.md"'
     assert "# Task Manager Audit" in audit_response.text
     assert "- Filters: all" in audit_response.text
+    assert "- Records: 3" in audit_response.text
+    assert "- Processed jobs: 5" in audit_response.text
+    assert "- Skipped jobs: 3" in audit_response.text
+    assert "- Failed jobs: 0" in audit_response.text
     assert "batch_delete" in audit_response.text
     assert "job-batch-done" in audit_response.text
 
@@ -1377,6 +1381,9 @@ def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
     skipped_audit_export = client.get("/tasks/audit.md?outcome=skipped")
     assert skipped_audit_export.status_code == 200
     assert "- Filters: 结果: Has skipped" in skipped_audit_export.text
+    assert "- Records: 2" in skipped_audit_export.text
+    assert "- Processed jobs: 3" in skipped_audit_export.text
+    assert "- Skipped jobs: 3" in skipped_audit_export.text
     assert "batch_stop" in skipped_audit_export.text
     assert "batch_rerun" in skipped_audit_export.text
     assert "batch_delete" not in skipped_audit_export.text
