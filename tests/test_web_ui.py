@@ -1744,6 +1744,41 @@ def test_task_manager_health_reports_healthy_baseline(monkeypatch, tmp_path: Pat
     assert "team_patch_backend" in response.text
 
 
+def test_task_manager_health_json_reports_machine_readable_summary(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    examples_dir = tmp_path / "examples"
+    examples_dir.mkdir()
+    (examples_dir / "task.mock.json").write_text("{}", encoding="utf-8")
+    repository = SQLiteJobRepository(tmp_path / ".omx" / "orchestrator.db")
+    repository.create(
+        {
+            "job_id": "job-health-json",
+            "status": "done",
+            "message": "done",
+            "task_path": "",
+            "run_id": "",
+        }
+    )
+    audit_path = tmp_path / ".omx" / "web-job-audit.jsonl"
+    audit_path.write_text(json.dumps({"event_type": "batch_delete"}, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    response = TestClient(app).get("/tasks/health.json")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"]["overall"] == "pass"
+    assert payload["summary"]["fail"] == 0
+    assert {check["name"] for check in payload["checks"]} >= {
+        "SQLite job database",
+        "Task audit log",
+        "Template examples",
+        "Docker command presets",
+    }
+    docker_check = next(check for check in payload["checks"] if check["name"] == "Docker command presets")
+    assert docker_check["status"] == "pass"
+    assert "team_patch_backend" in docker_check["detail"]
+
+
 def test_task_manager_health_warns_when_audit_log_missing_without_mutation(monkeypatch, tmp_path: Path):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "examples").mkdir()

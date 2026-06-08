@@ -12,7 +12,7 @@ Priority 1, Priority 2, and Priority 3 are implemented. Task-manager audit JSONL
 - Maintenance implementation: `/tasks/maintenance/prune` prunes only `done`, `failed`, and `stopped` Web Job records older than the selected age. It does not delete `.omx/runs/{run_id}` and writes a `maintenance_prune` audit event with selected, processed, skipped, failed, run IDs, cutoff, status scope, and artifact-preservation details.
 - Compatibility: `/tasks/audit` and `/tasks/audit.md` still read the active audit file first and do not change archived-file search semantics.
 - Non-blocking behavior: rotation errors surface as `OSError`; the existing Web handler warning path keeps task operations non-blocking when audit append fails.
-- Health-check implementation: `/tasks/health` reports pass/warn/fail rows for read-only SQLite access, audit log readability, template examples, static assets, required templates, and Docker command preset discoverability. The endpoint does not create `.omx`, job records, audit events, or run artifacts.
+- Health-check implementation: `/tasks/health` reports pass/warn/fail rows for read-only SQLite access, audit log readability, template examples, static assets, required templates, and Docker command preset discoverability. `/tasks/health.json` exposes the same read-only evidence for scripts and pre-demo automation. These endpoints do not create `.omx`, job records, audit events, or run artifacts.
 
 ## Verification Evidence
 
@@ -28,6 +28,7 @@ Priority 1, Priority 2, and Priority 3 are implemented. Task-manager audit JSONL
 - `python -m py_compile orchestrator/interfaces/web/main.py`: passed.
 - `python -m pytest -q tests/test_web_ui.py -k "health"`: 4 passed, 54 deselected.
 - `python -m pytest -q tests/test_web_ui.py -k "task_manager or audit or health"`: 14 passed, 44 deselected.
+- `python -m pytest -q tests/test_web_ui.py -k "health"`: 5 passed, 54 deselected.
 
 ## Remaining Work
 

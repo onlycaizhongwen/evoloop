@@ -14,7 +14,7 @@ from urllib.parse import urlencode, unquote
 
 import uvicorn
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -451,6 +451,12 @@ def task_manager_health_page(request: Request):
             "summary": summary,
         },
     )
+
+
+@app.get("/tasks/health.json")
+def task_manager_health_json():
+    checks = _build_demo_readiness_checks()
+    return JSONResponse({"summary": _summarize_demo_readiness(checks), "checks": checks})
 
 
 @app.post("/tasks/batch")
