@@ -287,3 +287,18 @@
 - 验证：`python -m pytest -q tests/test_web_ui.py -k "task_manager"` 通过，`6 passed, 46 deselected`；`python -m py_compile orchestrator/interfaces/web/main.py` 通过；`python -m pytest -q tests/test_web_ui.py` 通过，`52 passed`；`python -m pytest -q` 通过，`137 passed`；渲染 `/tasks` 返回 200，页面包含批量表单、全选控件、`/tasks/batch` endpoint 和全选 JS 绑定；本地 Uvicorn smoke `http://127.0.0.1:8767/tasks` 返回 200，并包含同一组任务管理控件；非破坏性 `POST /tasks/batch` 未选择任务时返回 303 到已编码的 `batch=` 提示，回跳页显示 `未选择任务，未执行批量操作。`。
 - 视觉检查：本地 Chrome headless 截图 `.tmp/task-manager-8767.png` 显示任务管理标题、筛选区、批量操作下拉、checkbox 列、任务表格和行操作按钮正常渲染，未见明显重叠。
 - Trace：`docs/codex/v1/trace/web-ui-task-manager-batch-operations-trace.md`，结论为计划、实现、测试和状态记录已闭环，未发现未对齐项。
+# 2026-06-08 Web UI Task Manager Operational Audit
+
+- 状态：已计划。
+- 摘要：下一步优先补齐任务管理页操作审计能力，为单条/批量停止、重跑、删除记录持久化事件证据，覆盖 selected/processed/skipped/failed Job、run 关联、请求筛选上下文和页面可导出的 Markdown 摘要。
+- 计划文档：`docs/codex/v1/plans/web-ui-task-manager-operational-audit.md`。
+- 推荐实施顺序：先新增 JSONL 审计写入器，再接入单条操作，然后接入批量操作结构化 summary，最后增加 `/tasks/audit.md` 和测试/trace。
+- 验证计划：`python -m pytest -q tests/test_web_ui.py -k "task_manager or audit"`；`python -m py_compile orchestrator/interfaces/web/main.py`；`python -m pytest -q tests/test_web_ui.py`；`python -m pytest -q`；`git diff --check`。
+
+# 2026-06-08 Web UI Task Manager Operational Audit 实现
+
+- 状态：已完成。
+- 摘要：任务管理页单条/批量 stop、rerun、delete 已写入 `.omx/web-job-audit.jsonl`，记录 selected/processed/skipped/failed Job、run 关联、请求上下文和原因明细；新增 `/tasks/audit.md` Markdown 导出和页面 `操作审计` 入口。
+- 产物：`orchestrator/infrastructure/persistence/web_job_audit_log.py`、`orchestrator/interfaces/web/main.py`、`orchestrator/interfaces/web/templates/tasks.html`、`tests/test_web_ui.py`、`docs/codex/v1/trace/web-ui-task-manager-operational-audit-trace.md`。
+- 验证：`python -m pytest -q tests/test_web_ui.py -k "task_manager or audit"` 通过，`8 passed, 44 deselected`；`python -m py_compile orchestrator/interfaces/web/main.py orchestrator/infrastructure/persistence/web_job_audit_log.py` 通过；`python -m pytest -q tests/test_web_ui.py` 通过，`52 passed`；`python -m pytest -q` 通过，`137 passed`。
+- Trace：`docs/codex/v1/trace/web-ui-task-manager-operational-audit-trace.md`，结论为计划、实现、测试和状态记录已闭环，剩余风险为 JSONL 暂未轮转且审计写入失败静默忽略。

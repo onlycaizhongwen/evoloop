@@ -943,6 +943,7 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert "Docker Patch JSON" in response.text
     assert "<table" in response.text
     assert 'id="task-batch-form"' in response.text
+    assert 'href="/tasks/audit.md">操作审计</a>' in response.text
     assert 'data-select-all-tasks' in response.text
     assert 'name="job_ids"' in response.text
     assert '<option value="stop">停止运行中任务</option>' in response.text
@@ -1197,6 +1198,11 @@ def test_task_manager_stops_and_deletes_jobs(monkeypatch, tmp_path: Path):
     assert delete_response.status_code == 303
     assert delete_response.headers["location"] == "/tasks?status=all&quality=missing&rerun=available&page=1&page_size=10&q=%E8%BF%90%E8%A1%8C%E4%B8%AD+%E4%BB%BB%E5%8A%A1"
     assert repository.get("job-stop-delete") is None
+    audit_lines = (tmp_path / ".omx" / "web-job-audit.jsonl").read_text(encoding="utf-8").splitlines()
+    delete_event = json.loads(audit_lines[-1])
+    assert delete_event["event_type"] == "single_delete"
+    assert delete_event["processed_job_ids"] == ["job-stop-delete"]
+    assert delete_event["details"]["deleted_job"]["job_id"] == "job-stop-delete"
 
 
 def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
@@ -1279,6 +1285,11 @@ def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
     assert repository.get("job-batch-running")["status"] == "stopped"
     stopped_detail = client.get(stop_response.headers["location"])
     assert "批量停止：成功 1 个，跳过 1 个，失败 0 个。" in stopped_detail.text
+    stop_audit = json.loads((tmp_path / ".omx" / "web-job-audit.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+    assert stop_audit["event_type"] == "batch_stop"
+    assert stop_audit["selected_job_ids"] == ["job-batch-running", "job-batch-done"]
+    assert stop_audit["processed_job_ids"] == ["job-batch-running"]
+    assert stop_audit["skipped_job_ids"] == ["job-batch-done"]
 
     rerun_response = client.post(
         "/tasks/batch",
@@ -1300,6 +1311,11 @@ def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
     assert len(rerun_tasks) == 1
     rerun_detail = client.get(rerun_response.headers["location"])
     assert "批量重新运行：成功 1 个，跳过 2 个，失败 0 个。" in rerun_detail.text
+    rerun_audit = json.loads((tmp_path / ".omx" / "web-job-audit.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+    assert rerun_audit["event_type"] == "batch_rerun"
+    assert "job-batch-done" in rerun_audit["processed_job_ids"]
+    assert "job-batch-failed" in rerun_audit["skipped_job_ids"]
+    assert rerun_audit["details"]["reasons"]["job-batch-failed"] == "missing task.json"
 
     delete_response = client.post(
         "/tasks/batch",
@@ -1322,6 +1338,13 @@ def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
     assert repository.get("job-batch-running") is not None
     delete_detail = client.get(delete_response.headers["location"])
     assert "批量删除：成功 2 个，跳过 0 个，失败 0 个。" in delete_detail.text
+
+    audit_response = client.get("/tasks/audit.md")
+    assert audit_response.status_code == 200
+    assert audit_response.headers["content-disposition"] == 'attachment; filename="task-manager-audit.md"'
+    assert "# Task Manager Audit" in audit_response.text
+    assert "batch_delete" in audit_response.text
+    assert "job-batch-done" in audit_response.text
 
 
 def test_task_manager_url_preserves_query():

@@ -41,6 +41,7 @@ from orchestrator.infrastructure.logging.file_heartbeat import FileHeartbeat
 from orchestrator.infrastructure.patches.pending_patch_service import PendingPatchService
 from orchestrator.infrastructure.persistence.file_state_repository import FileStateRepository
 from orchestrator.infrastructure.persistence.sqlite_job_repository import SQLiteJobRepository
+from orchestrator.infrastructure.persistence.web_job_audit_log import WebJobAuditEvent, WebJobAuditLog
 from orchestrator.interfaces.cli.main import build_agent, build_post_apply_validation_use_case
 from orchestrator.report.final_report_writer import FinalReportWriter
 
@@ -48,6 +49,7 @@ from orchestrator.report.final_report_writer import FinalReportWriter
 RUNS_DIR = Path(".omx/runs")
 JOBS_DB_PATH = Path(".omx/orchestrator.db")
 WEB_TASKS_DIR = Path(".omx/web-tasks")
+WEB_JOB_AUDIT_PATH = Path(".omx/web-job-audit.jsonl")
 WEB_DIR = Path(__file__).parent
 DEFAULT_SMOKE_WORKTREE = Path(".tmp/omx-unified-diff-smoke")
 TEMPLATES = Jinja2Templates(directory=str(WEB_DIR / "templates"))
@@ -364,6 +366,16 @@ def task_manager(
     )
 
 
+@app.get("/tasks/audit.md")
+def task_manager_audit_markdown():
+    records = WebJobAuditLog(WEB_JOB_AUDIT_PATH).list_recent(limit=50)
+    return PlainTextResponse(
+        _build_task_manager_audit_markdown(records),
+        media_type="text/markdown",
+        headers={"Content-Disposition": 'attachment; filename="task-manager-audit.md"'},
+    )
+
+
 @app.post("/tasks/batch")
 def batch_tasks(
     action: Annotated[str, Form()],
@@ -396,6 +408,13 @@ def batch_tasks(
     else:
         summary = {"label": "未知批量操作", "processed": 0, "skipped": len(selected_job_ids), "failed": 0}
 
+    _append_batch_web_job_audit(
+        action=action,
+        selected_job_ids=selected_job_ids,
+        summary=summary,
+        request_context=_task_request_context(status=status, quality=quality, rerun=rerun, page=page, page_size=page_size, q=q),
+    )
+
     notice = (
         f"{summary['label']}：成功 {summary['processed']} 个，"
         f"跳过 {summary['skipped']} 个，失败 {summary['failed']} 个。"
@@ -423,6 +442,8 @@ def stop_task(
 ):
     safe_job_id = _safe_id(job_id)
     job = _read_job(safe_job_id)
+    processed_job_ids: list[str] = []
+    skipped_job_ids: list[str] = []
     if job and str(job.get("status") or "") == "running":
         cancelled_running_process = WEB_CANCELLATION_REGISTRY.cancel(safe_job_id)
         _update_job(
@@ -435,6 +456,21 @@ def stop_task(
             ),
             finished_at=datetime.now().isoformat(),
         )
+        processed_job_ids.append(safe_job_id)
+    else:
+        skipped_job_ids.append(safe_job_id)
+    _append_web_job_audit(
+        WebJobAuditEvent(
+            event_type="single_stop",
+            request_context=_task_request_context(status=status, quality=quality, rerun=rerun, page=page, page_size=page_size, q=q),
+            selected_job_ids=[safe_job_id],
+            processed_job_ids=processed_job_ids,
+            skipped_job_ids=skipped_job_ids,
+            run_ids=_job_run_ids([job]),
+            message="停止任务",
+            details={"job": _job_snapshot(job), "reason": "" if processed_job_ids else "job missing or not running"},
+        )
+    )
     return RedirectResponse(
         url=_tasks_url(status=status, quality=quality, rerun=rerun, page=page, page_size=page_size, q=q),
         status_code=303,
@@ -451,7 +487,20 @@ def delete_task(
     page_size: int = 10,
     q: str = "",
 ):
-    _job_repository().delete(_safe_id(job_id))
+    safe_job_id = _safe_id(job_id)
+    job = _read_job(safe_job_id)
+    _job_repository().delete(safe_job_id)
+    _append_web_job_audit(
+        WebJobAuditEvent(
+            event_type="single_delete",
+            request_context=_task_request_context(status=status, quality=quality, rerun=rerun, page=page, page_size=page_size, q=q),
+            selected_job_ids=[safe_job_id],
+            processed_job_ids=[safe_job_id],
+            run_ids=_job_run_ids([job]),
+            message="删除任务记录",
+            details={"deleted_job": _job_snapshot(job)},
+        )
+    )
     return RedirectResponse(
         url=_tasks_url(status=status, quality=quality, rerun=rerun, page=page, page_size=page_size, q=q),
         status_code=303,
@@ -542,12 +591,41 @@ def run_audit_markdown(run_id: str):
 def rerun_job(job_id: str):
     job = _read_job(job_id)
     if not job:
+        _append_web_job_audit(
+            WebJobAuditEvent(
+                event_type="single_rerun",
+                selected_job_ids=[_safe_id(job_id)],
+                skipped_job_ids=[_safe_id(job_id)],
+                message="重新运行任务",
+                details={"reason": "job missing"},
+            )
+        )
         return RedirectResponse(url="/tasks", status_code=303)
     run_id = str(job.get("run_id") or "")
     task_path = _task_path_for_job(job, run_id)
     if not task_path:
+        _append_web_job_audit(
+            WebJobAuditEvent(
+                event_type="single_rerun",
+                selected_job_ids=[_safe_id(job_id)],
+                skipped_job_ids=[_safe_id(job_id)],
+                run_ids=_job_run_ids([job]),
+                message="重新运行任务",
+                details={"job": _job_snapshot(job), "reason": "missing task.json"},
+            )
+        )
         return RedirectResponse(url=f"/jobs/{_safe_id(job_id)}?rerun_error=missing_task", status_code=303)
     new_job_id = _rerun_task_path(task_path)
+    _append_web_job_audit(
+        WebJobAuditEvent(
+            event_type="single_rerun",
+            selected_job_ids=[_safe_id(job_id)],
+            processed_job_ids=[_safe_id(job_id), new_job_id],
+            run_ids=_job_run_ids([job]),
+            message="重新运行任务",
+            details={"source_job": _job_snapshot(job), "new_job_id": new_job_id},
+        )
+    )
     return RedirectResponse(url=f"/jobs/{new_job_id}", status_code=303)
 
 
@@ -1021,6 +1099,99 @@ def _batch_rerun_jobs(job_ids: list[str]) -> dict[str, int | str]:
         except Exception:
             failed += 1
     return {"label": "批量重新运行", "processed": processed, "skipped": skipped, "failed": failed}
+
+
+def _empty_batch_summary(label: str) -> dict[str, Any]:
+    return {
+        "label": label,
+        "processed": 0,
+        "skipped": 0,
+        "failed": 0,
+        "processed_job_ids": [],
+        "skipped_job_ids": [],
+        "failed_job_ids": [],
+        "run_ids": [],
+        "reasons": {},
+    }
+
+
+def _record_batch_processed(summary: dict[str, Any], job_id: str, job: dict[str, Any] | None) -> None:
+    summary["processed"] += 1
+    summary["processed_job_ids"].append(job_id)
+    for run_id in _job_run_ids([job]):
+        if run_id not in summary["run_ids"]:
+            summary["run_ids"].append(run_id)
+
+
+def _record_batch_skipped(summary: dict[str, Any], job_id: str, reason: str) -> None:
+    summary["skipped"] += 1
+    summary["skipped_job_ids"].append(job_id)
+    summary["reasons"][job_id] = reason
+
+
+def _record_batch_failed(summary: dict[str, Any], job_id: str, reason: str) -> None:
+    summary["failed"] += 1
+    summary["failed_job_ids"].append(job_id)
+    summary["reasons"][job_id] = reason
+
+
+def _batch_stop_jobs(job_ids: list[str]) -> dict[str, Any]:
+    summary = _empty_batch_summary("批量停止")
+    for job_id in job_ids:
+        job = _read_job(job_id)
+        if not job or str(job.get("status") or "") != "running":
+            _record_batch_skipped(summary, job_id, "job missing or not running")
+            continue
+        try:
+            cancelled_running_process = WEB_CANCELLATION_REGISTRY.cancel(job_id)
+            _update_job(
+                job_id,
+                status="stopped",
+                message=(
+                    "底层命令已收到终止信号。"
+                    if cancelled_running_process
+                    else "已收到批量停止请求。当前没有可终止的底层命令，Web Job 状态已冻结。"
+                ),
+                finished_at=datetime.now().isoformat(),
+            )
+            _record_batch_processed(summary, job_id, job)
+        except Exception:
+            _record_batch_failed(summary, job_id, "exception")
+    return summary
+
+
+def _batch_delete_jobs(job_ids: list[str]) -> dict[str, Any]:
+    summary = _empty_batch_summary("批量删除")
+    repository = _job_repository()
+    for job_id in job_ids:
+        job = _read_job(job_id)
+        try:
+            repository.delete(job_id)
+            _record_batch_processed(summary, job_id, job)
+        except Exception:
+            _record_batch_failed(summary, job_id, "exception")
+    return summary
+
+
+def _batch_rerun_jobs(job_ids: list[str]) -> dict[str, Any]:
+    summary = _empty_batch_summary("批量重新运行")
+    for job_id in job_ids:
+        job = _read_job(job_id)
+        if not job or str(job.get("status") or "") == "running":
+            _record_batch_skipped(summary, job_id, "job missing or running")
+            continue
+        run_id = str(job.get("run_id") or "")
+        task_path = _task_path_for_job(job, run_id)
+        if not task_path:
+            _record_batch_skipped(summary, job_id, "missing task.json")
+            continue
+        try:
+            new_job_id = _rerun_task_path(task_path)
+            _record_batch_processed(summary, job_id, job)
+            summary["processed_job_ids"].append(new_job_id)
+        except Exception:
+            _record_batch_failed(summary, job_id, "exception")
+    return summary
 
 
 def _task_manager_job_matches(job: dict[str, str], needle: str) -> bool:
@@ -1841,6 +2012,104 @@ def _redirect_to_tasks_with_batch_notice(
 ) -> RedirectResponse:
     url = _tasks_url(status=status, quality=quality, rerun=rerun, page=page, page_size=page_size, q=q)
     return RedirectResponse(url=f"{url}&{urlencode({'batch': notice})}", status_code=303)
+
+
+def _task_request_context(
+    *,
+    status: str = "all",
+    quality: str = "all",
+    rerun: str = "all",
+    page: int = 1,
+    page_size: int = 10,
+    q: str = "",
+) -> dict[str, str | int]:
+    return {"status": status, "quality": quality, "rerun": rerun, "page": page, "page_size": page_size, "q": q}
+
+
+def _append_batch_web_job_audit(
+    *,
+    action: str,
+    selected_job_ids: list[str],
+    summary: dict[str, Any],
+    request_context: dict[str, Any],
+) -> None:
+    _append_web_job_audit(
+        WebJobAuditEvent(
+            event_type=f"batch_{action}" if action in {"stop", "delete", "rerun"} else "batch_unknown",
+            request_context=request_context,
+            selected_job_ids=selected_job_ids,
+            processed_job_ids=list(summary.get("processed_job_ids") or []),
+            skipped_job_ids=list(summary.get("skipped_job_ids") or []),
+            failed_job_ids=list(summary.get("failed_job_ids") or []),
+            run_ids=list(summary.get("run_ids") or []),
+            message=str(summary.get("label") or ""),
+            details={"reasons": summary.get("reasons") or {}},
+        )
+    )
+
+
+def _append_web_job_audit(event: WebJobAuditEvent) -> None:
+    try:
+        WebJobAuditLog(WEB_JOB_AUDIT_PATH).append(event)
+    except Exception:
+        # Task operations should remain available even if the audit file is temporarily unwritable.
+        return
+
+
+def _job_snapshot(job: dict[str, Any] | None) -> dict[str, str]:
+    if not job:
+        return {}
+    return {
+        "job_id": str(job.get("job_id") or ""),
+        "status": str(job.get("status") or ""),
+        "message": str(job.get("message") or ""),
+        "task_path": str(job.get("task_path") or ""),
+        "run_id": str(job.get("run_id") or ""),
+        "started_at": str(job.get("started_at") or ""),
+        "finished_at": str(job.get("finished_at") or ""),
+        "updated_at": str(job.get("updated_at") or ""),
+    }
+
+
+def _job_run_ids(jobs: Iterable[dict[str, Any] | None]) -> list[str]:
+    run_ids: list[str] = []
+    for job in jobs:
+        if not job:
+            continue
+        run_id = str(job.get("run_id") or "")
+        if run_id and run_id not in run_ids:
+            run_ids.append(run_id)
+    return run_ids
+
+
+def _build_task_manager_audit_markdown(records: list[dict[str, Any]]) -> str:
+    lines = ["# Task Manager Audit", ""]
+    if not records:
+        lines.append("No task manager audit events recorded.")
+        return "\n".join(lines) + "\n"
+    for record in records:
+        event_type = str(record.get("event_type") or "")
+        created_at = str(record.get("created_at") or "")
+        selected = list(record.get("selected_job_ids") or [])
+        processed = list(record.get("processed_job_ids") or [])
+        skipped = list(record.get("skipped_job_ids") or [])
+        failed = list(record.get("failed_job_ids") or [])
+        run_ids = list(record.get("run_ids") or [])
+        message = str(record.get("message") or "")
+        lines.extend(
+            [
+                f"## {created_at} {event_type}",
+                "",
+                f"- Message: {message}",
+                f"- Selected: {len(selected)} ({', '.join(selected) if selected else '-'})",
+                f"- Processed: {len(processed)} ({', '.join(processed) if processed else '-'})",
+                f"- Skipped: {len(skipped)} ({', '.join(skipped) if skipped else '-'})",
+                f"- Failed: {len(failed)} ({', '.join(failed) if failed else '-'})",
+                f"- Runs: {', '.join(run_ids) if run_ids else '-'}",
+                "",
+            ]
+        )
+    return "\n".join(lines)
 
 
 def _list_task_templates_with_recent_jobs(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
