@@ -20,7 +20,7 @@ class SQLiteJobRepository:
             "run_id": str(payload.get("run_id", "")),
             "started_at": str(payload.get("started_at", now)),
             "finished_at": str(payload.get("finished_at", "")),
-            "updated_at": now,
+            "updated_at": str(payload.get("updated_at", now)),
         }
         with self._connect() as connection:
             connection.execute(
@@ -46,6 +46,7 @@ class SQLiteJobRepository:
     def update(self, job_id: str, **updates: Any) -> None:
         existing = self.get(job_id) or {"job_id": job_id, "started_at": datetime.now().isoformat()}
         existing.update(updates)
+        existing["updated_at"] = str(updates.get("updated_at", datetime.now().isoformat()))
         self.create(existing)
 
     def get(self, job_id: str) -> dict[str, Any] | None:
@@ -84,6 +85,22 @@ class SQLiteJobRepository:
             params.append(status)
         query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
+        with self._connect() as connection:
+            rows = connection.execute(query, params).fetchall()
+        return [dict(row) for row in rows]
+
+    def list_before(self, *, updated_before: str, statuses: list[str], limit: int = 500) -> list[dict[str, Any]]:
+        if not statuses:
+            return []
+        placeholders = ", ".join("?" for _ in statuses)
+        query = f"""
+            SELECT job_id, status, message, task_path, run_id, started_at, finished_at, updated_at
+            FROM web_jobs
+            WHERE updated_at < ? AND status IN ({placeholders})
+            ORDER BY updated_at ASC
+            LIMIT ?
+        """
+        params: list[Any] = [updated_before, *statuses, limit]
         with self._connect() as connection:
             rows = connection.execute(query, params).fetchall()
         return [dict(row) for row in rows]

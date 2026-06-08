@@ -1475,6 +1475,96 @@ def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
     assert "job-batch-failed" in job_search_page.text
 
 
+def test_task_manager_maintenance_prunes_old_non_running_jobs(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+    runs_dir = tmp_path / ".omx" / "runs"
+    old_done_run = runs_dir / "run-maintenance-old-done"
+    old_done_run.mkdir(parents=True)
+    old_failed_run = runs_dir / "run-maintenance-old-failed"
+    old_failed_run.mkdir(parents=True)
+    old_running_run = runs_dir / "run-maintenance-old-running"
+    old_running_run.mkdir(parents=True)
+    old_timestamp = "2026-01-01T00:00:00"
+    fresh_timestamp = datetime.now().isoformat()
+    repository = SQLiteJobRepository(tmp_path / ".omx" / "orchestrator.db")
+    for payload in [
+        {
+            "job_id": "job-maintenance-old-done",
+            "status": "done",
+            "message": "old done",
+            "task_path": "",
+            "run_id": "run-maintenance-old-done",
+            "updated_at": old_timestamp,
+        },
+        {
+            "job_id": "job-maintenance-old-failed",
+            "status": "failed",
+            "message": "old failed",
+            "task_path": "",
+            "run_id": "run-maintenance-old-failed",
+            "updated_at": old_timestamp,
+        },
+        {
+            "job_id": "job-maintenance-old-running",
+            "status": "running",
+            "message": "old running",
+            "task_path": "",
+            "run_id": "run-maintenance-old-running",
+            "updated_at": old_timestamp,
+        },
+        {
+            "job_id": "job-maintenance-fresh-done",
+            "status": "done",
+            "message": "fresh done",
+            "task_path": "",
+            "run_id": "run-maintenance-fresh-done",
+            "updated_at": fresh_timestamp,
+        },
+    ]:
+        repository.create(payload)
+    client = TestClient(app)
+
+    response = client.post(
+        "/tasks/maintenance/prune",
+        data={
+            "older_than_days": "30",
+            "status": "all",
+            "quality": "all",
+            "rerun": "all",
+            "page": "1",
+            "page_size": "10",
+            "q": "",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    detail = client.get(response.headers["location"])
+    assert detail.status_code == 200
+    assert "维护清理 30 天前任务记录：成功 2 个，跳过 0 个，失败 0 个。" in detail.text
+    assert repository.get("job-maintenance-old-done") is None
+    assert repository.get("job-maintenance-old-failed") is None
+    assert repository.get("job-maintenance-old-running") is not None
+    assert repository.get("job-maintenance-fresh-done") is not None
+    assert old_done_run.exists()
+    assert old_failed_run.exists()
+    assert old_running_run.exists()
+    audit_event = json.loads((tmp_path / ".omx" / "web-job-audit.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+    assert audit_event["event_type"] == "maintenance_prune"
+    assert audit_event["selected_job_ids"] == ["job-maintenance-old-done", "job-maintenance-old-failed"]
+    assert audit_event["processed_job_ids"] == ["job-maintenance-old-done", "job-maintenance-old-failed"]
+    assert audit_event["skipped_job_ids"] == []
+    assert audit_event["run_ids"] == ["run-maintenance-old-done", "run-maintenance-old-failed"]
+    assert audit_event["details"]["preserved_run_dirs"] is True
+    assert audit_event["details"]["statuses"] == ["done", "failed", "stopped"]
+
+    audit_page = client.get("/tasks/audit?event_type=maintenance_prune")
+    assert audit_page.status_code == 200
+    assert "maintenance_prune" in audit_page.text
+    assert "job-maintenance-old-done" in audit_page.text
+
+
 def test_task_manager_url_preserves_query():
     url = _tasks_url(status="running", quality="failed", rerun="available", page=2, page_size=20, q="abc def")
 

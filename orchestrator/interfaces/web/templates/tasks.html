@@ -126,6 +126,25 @@
             <button type="submit" class="secondary" data-confirm="确认对已勾选任务执行批量操作？删除只移除任务记录，run 目录和审计日志会保留。">执行</button>
           </div>
         </form>
+        <form class="task-toolbar" method="post" action="/tasks/maintenance/prune">
+          <input type="hidden" name="status" value="{{ active_status }}">
+          <input type="hidden" name="quality" value="{{ active_quality }}">
+          <input type="hidden" name="rerun" value="{{ active_rerun }}">
+          <input type="hidden" name="page" value="{{ pagination.page }}">
+          <input type="hidden" name="page_size" value="{{ pagination.page_size }}">
+          <input type="hidden" name="q" value="{{ query }}">
+          <label>维护清理
+            <select name="older_than_days">
+              <option value="7">7 天前</option>
+              <option value="30" selected>30 天前</option>
+              <option value="90">90 天前</option>
+            </select>
+          </label>
+          <span class="muted-line">仅清理 done / failed / stopped 的 Web Job 记录；run 目录和审计日志会保留。</span>
+          <div class="toolbar-actions">
+            <button type="submit" class="secondary" data-confirm="确认清理早于所选天数的非运行任务记录？run 目录和审计日志会保留。">清理旧记录</button>
+          </div>
+        </form>
         <div class="task-table-wrap">
           <table class="task-table">
             <thead>

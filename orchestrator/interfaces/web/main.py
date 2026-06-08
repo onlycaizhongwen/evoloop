@@ -6,7 +6,7 @@ import re
 import shlex
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any, Iterable
 from urllib.parse import urlencode, unquote
@@ -51,6 +51,8 @@ RUNS_DIR = Path(".omx/runs")
 JOBS_DB_PATH = Path(".omx/orchestrator.db")
 WEB_TASKS_DIR = Path(".omx/web-tasks")
 WEB_JOB_AUDIT_PATH = Path(".omx/web-job-audit.jsonl")
+MAINTENANCE_PRUNE_STATUSES = ["done", "failed", "stopped"]
+MAINTENANCE_PRUNE_AGE_OPTIONS = [7, 30, 90]
 WEB_DIR = Path(__file__).parent
 DEFAULT_SMOKE_WORKTREE = Path(".tmp/omx-unified-diff-smoke")
 TEMPLATES = Jinja2Templates(directory=str(WEB_DIR / "templates"))
@@ -475,6 +477,52 @@ def batch_tasks(
         request_context=_task_request_context(status=status, quality=quality, rerun=rerun, page=page, page_size=page_size, q=q),
     )
 
+    notice = (
+        f"{summary['label']}：成功 {summary['processed']} 个，"
+        f"跳过 {summary['skipped']} 个，失败 {summary['failed']} 个。"
+    )
+    return _redirect_to_tasks_with_batch_notice(
+        notice,
+        status=status,
+        quality=quality,
+        rerun=rerun,
+        page=page,
+        page_size=page_size,
+        q=q,
+    )
+
+
+@app.post("/tasks/maintenance/prune")
+def prune_tasks(
+    older_than_days: Annotated[int, Form()] = 30,
+    status: Annotated[str, Form()] = "all",
+    quality: Annotated[str, Form()] = "all",
+    rerun: Annotated[str, Form()] = "all",
+    page: Annotated[int, Form()] = 1,
+    page_size: Annotated[int, Form()] = 10,
+    q: Annotated[str, Form()] = "",
+):
+    age_days = _normalize_maintenance_prune_age(older_than_days)
+    summary = _prune_old_web_jobs(age_days)
+    _append_web_job_audit(
+        WebJobAuditEvent(
+            event_type="maintenance_prune",
+            request_context=_task_request_context(status=status, quality=quality, rerun=rerun, page=page, page_size=page_size, q=q),
+            selected_job_ids=list(summary.get("selected_job_ids") or []),
+            processed_job_ids=list(summary.get("processed_job_ids") or []),
+            skipped_job_ids=list(summary.get("skipped_job_ids") or []),
+            failed_job_ids=list(summary.get("failed_job_ids") or []),
+            run_ids=list(summary.get("run_ids") or []),
+            message=str(summary.get("label") or ""),
+            details={
+                "older_than_days": age_days,
+                "cutoff": summary.get("cutoff") or "",
+                "statuses": MAINTENANCE_PRUNE_STATUSES,
+                "preserved_run_dirs": True,
+                "reasons": summary.get("reasons") or {},
+            },
+        )
+    )
     notice = (
         f"{summary['label']}：成功 {summary['processed']} 个，"
         f"跳过 {summary['skipped']} 个，失败 {summary['failed']} 个。"
@@ -1249,6 +1297,37 @@ def _batch_rerun_jobs(job_ids: list[str]) -> dict[str, Any]:
             new_job_id = _rerun_task_path(task_path)
             _record_batch_processed(summary, job_id, job)
             summary["processed_job_ids"].append(new_job_id)
+        except Exception:
+            _record_batch_failed(summary, job_id, "exception")
+    return summary
+
+
+def _normalize_maintenance_prune_age(value: int) -> int:
+    return value if value in MAINTENANCE_PRUNE_AGE_OPTIONS else 30
+
+
+def _prune_old_web_jobs(older_than_days: int) -> dict[str, Any]:
+    cutoff = (datetime.now() - timedelta(days=older_than_days)).isoformat()
+    candidates = _job_repository().list_before(
+        updated_before=cutoff,
+        statuses=MAINTENANCE_PRUNE_STATUSES,
+        limit=500,
+    )
+    summary = _empty_batch_summary(f"维护清理 {older_than_days} 天前任务记录")
+    summary["cutoff"] = cutoff
+    summary["selected_job_ids"] = [str(job.get("job_id") or "") for job in candidates]
+    repository = _job_repository()
+    for job in candidates:
+        job_id = str(job.get("job_id") or "")
+        if not job_id:
+            _record_batch_skipped(summary, job_id, "missing job_id")
+            continue
+        if str(job.get("status") or "") == "running":
+            _record_batch_skipped(summary, job_id, "running jobs are preserved")
+            continue
+        try:
+            repository.delete(job_id)
+            _record_batch_processed(summary, job_id, job)
         except Exception:
             _record_batch_failed(summary, job_id, "exception")
     return summary

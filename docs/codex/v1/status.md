@@ -379,6 +379,13 @@
 - 推荐顺序：Audit Log Retention And Rotation -> Task Manager Maintenance Actions -> Demo Readiness Health Check。
 - 验证计划：`python -m pytest -q tests/test_web_ui.py -k "task_manager or audit"`；`python -m py_compile orchestrator/interfaces/web/main.py orchestrator/infrastructure/persistence/web_job_audit_log.py`；`python -m pytest -q tests/test_web_ui.py`；`python -m pytest -q`；`git diff --check`。
 
+# 2026-06-08 Web UI Task Manager Maintenance Prune
+
+- Status: completed.
+- Summary: `/tasks` now has a conservative maintenance action for pruning old `done` / `failed` / `stopped` Web Job records by selected age. The action never deletes `.omx/runs/{run_id}` directories by default and records a `maintenance_prune` audit event with selected, processed, skipped, failed, run IDs, cutoff, status scope, and preserved-run-dir evidence.
+- Artifacts: `orchestrator/infrastructure/persistence/sqlite_job_repository.py`, `orchestrator/interfaces/web/main.py`, `orchestrator/interfaces/web/templates/tasks.html`, `tests/test_web_ui.py`, `docs/codex/v1/trace/web-ui-operational-maintenance-hardening-trace.md`.
+- Verification so far: `python -m py_compile orchestrator/interfaces/web/main.py orchestrator/infrastructure/persistence/sqlite_job_repository.py` passed; `python -m pytest -q tests/test_web_ui.py -k "task_manager and maintenance"` passed with `1 passed, 53 deselected`; `python -m pytest -q tests/test_web_ui.py -k "task_manager or audit"` passed with `10 passed, 44 deselected`.
+
 # 2026-06-08 Web UI Audit Log Retention And Rotation
 
 - 状态：已完成。
