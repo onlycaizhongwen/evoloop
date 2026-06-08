@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>任务操作审计</title>
-  <link rel="stylesheet" href="/static/styles.css?v=task-audit-20260608-search">
+  <link rel="stylesheet" href="/static/styles.css?v=task-audit-20260608-limit">
 </head>
 <body>
   <main class="app-layout">
@@ -23,7 +23,7 @@
       <header class="workspace-header">
         <div>
           <h1>任务操作审计</h1>
-          <p>显示 {{ filtered_total }} / {{ total }} 条任务管理操作记录。</p>
+          <p>显示 {{ filtered_total }} / {{ total }} 条最近任务管理操作记录。</p>
         </div>
         <div class="toolbar-actions">
           <a class="button secondary" href="/tasks">返回任务列表</a>
@@ -43,6 +43,13 @@
           </label>
           <label>搜索
             <input name="q" value="{{ query }}" placeholder="Job ID、Run ID、事件、原因">
+          </label>
+          <label>最近
+            <select name="limit">
+              {% for option in limit_options %}
+              <option value="{{ option }}" {% if limit == option %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
           </label>
           <div class="toolbar-actions">
             <button type="submit">筛选</button>

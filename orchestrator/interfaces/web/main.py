@@ -377,8 +377,9 @@ def task_manager_audit_markdown():
 
 
 @app.get("/tasks/audit", response_class=HTMLResponse)
-def task_manager_audit_page(request: Request, event_type: str = "all", q: str = ""):
-    records = WebJobAuditLog(WEB_JOB_AUDIT_PATH).list_recent(limit=50)
+def task_manager_audit_page(request: Request, event_type: str = "all", q: str = "", limit: int = 50):
+    active_limit = _normalize_task_manager_audit_limit(limit)
+    records = WebJobAuditLog(WEB_JOB_AUDIT_PATH).list_recent(limit=active_limit)
     event_types = _task_manager_audit_event_types(records)
     active_event_type = event_type if event_type == "all" or event_type in event_types else "all"
     filtered_records = _filter_task_manager_audit_records(records, active_event_type)
@@ -394,6 +395,8 @@ def task_manager_audit_page(request: Request, event_type: str = "all", q: str = 
             "event_types": event_types,
             "active_event_type": active_event_type,
             "query": query,
+            "limit": active_limit,
+            "limit_options": [25, 50, 100, 200],
         },
     )
 
@@ -2136,6 +2139,12 @@ def _build_task_manager_audit_markdown(records: list[dict[str, Any]]) -> str:
 
 def _task_manager_audit_event_types(records: list[dict[str, Any]]) -> list[str]:
     return sorted({str(record.get("event_type") or "") for record in records if record.get("event_type")})
+
+
+def _normalize_task_manager_audit_limit(limit: int) -> int:
+    if limit in {25, 50, 100, 200}:
+        return limit
+    return 50
 
 
 def _filter_task_manager_audit_records(records: list[dict[str, Any]], event_type: str) -> list[dict[str, Any]]:

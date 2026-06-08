@@ -1349,6 +1349,7 @@ def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
     audit_page = client.get("/tasks/audit")
     assert audit_page.status_code == 200
     assert "任务操作审计" in audit_page.text
+    assert '<option value="50" selected>50</option>' in audit_page.text
     assert "batch_delete" in audit_page.text
     assert "job-batch-done" in audit_page.text
     assert "missing task.json" in audit_page.text
@@ -1357,7 +1358,7 @@ def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
 
     rerun_audit_page = client.get("/tasks/audit?event_type=batch_rerun")
     assert rerun_audit_page.status_code == 200
-    assert "显示 1 / 3 条任务管理操作记录。" in rerun_audit_page.text
+    assert "1 / 3" in rerun_audit_page.text
     assert '<option value="batch_rerun" selected>batch_rerun</option>' in rerun_audit_page.text
     assert "batch_rerun" in rerun_audit_page.text
 
@@ -1365,9 +1366,17 @@ def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
     assert invalid_filter_page.status_code == 200
     assert '<option value="all" selected>All (3)</option>' in invalid_filter_page.text
 
+    limit_page = client.get("/tasks/audit?limit=25")
+    assert limit_page.status_code == 200
+    assert '<option value="25" selected>25</option>' in limit_page.text
+
+    invalid_limit_page = client.get("/tasks/audit?limit=999")
+    assert invalid_limit_page.status_code == 200
+    assert '<option value="50" selected>50</option>' in invalid_limit_page.text
+
     reason_search_page = client.get("/tasks/audit?q=missing+task.json")
     assert reason_search_page.status_code == 200
-    assert "显示 1 / 3 条任务管理操作记录。" in reason_search_page.text
+    assert "1 / 3" in reason_search_page.text
     assert 'name="q" value="missing task.json"' in reason_search_page.text
     assert "batch_rerun" in reason_search_page.text
 
