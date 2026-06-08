@@ -1006,7 +1006,8 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert 'data-confirm="确认从任务列表移除该记录？run 目录和审计日志会保留。"' in response.text
     assert "共 3 条，第 1 / 1 页" in response.text
     assert 'class="sidebar"' in response.text
-    assert '<nav class="side-nav">\n        <a class="active" href="/tasks">任务管理</a>\n      </nav>' in response.text
+    assert '<nav class="side-nav">' in response.text
+    assert 'href="/tasks/health">Demo Readiness</a>' in response.text
     assert 'data-open-modal="task-create-modal"' in response.text
     assert 'id="task-create-modal"' in response.text
     assert 'action="/tasks/run"' in response.text
@@ -1710,6 +1711,76 @@ def test_web_static_styles_available():
     assert ".shell" in response.text
     assert ".status-pill.severity-major" in response.text
     assert ".alert-actions" in response.text
+
+
+def test_task_manager_health_reports_healthy_baseline(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    examples_dir = tmp_path / "examples"
+    examples_dir.mkdir()
+    (examples_dir / "task.mock.json").write_text("{}", encoding="utf-8")
+    repository = SQLiteJobRepository(tmp_path / ".omx" / "orchestrator.db")
+    repository.create(
+        {
+            "job_id": "job-health",
+            "status": "done",
+            "message": "done",
+            "task_path": "",
+            "run_id": "",
+        }
+    )
+    audit_path = tmp_path / ".omx" / "web-job-audit.jsonl"
+    audit_path.write_text(json.dumps({"event_type": "batch_delete"}, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    response = TestClient(app).get("/tasks/health")
+
+    assert response.status_code == 200
+    assert "Demo Readiness" in response.text
+    assert "SQLite job database" in response.text
+    assert "Database opens read-only." in response.text
+    assert "Task audit log" in response.text
+    assert "Audit log is readable." in response.text
+    assert "Template examples" in response.text
+    assert "Docker command presets" in response.text
+    assert "team_patch_backend" in response.text
+
+
+def test_task_manager_health_warns_when_audit_log_missing_without_mutation(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+    before_paths = sorted(str(path.relative_to(tmp_path)) for path in tmp_path.rglob("*"))
+
+    response = TestClient(app).get("/tasks/health")
+
+    after_paths = sorted(str(path.relative_to(tmp_path)) for path in tmp_path.rglob("*"))
+    assert response.status_code == 200
+    assert "Audit log does not exist yet." in response.text
+    assert "No Web Job database found yet." in response.text
+    assert before_paths == after_paths
+    assert not (tmp_path / ".omx").exists()
+
+
+def test_task_manager_health_warns_on_corrupt_audit_lines(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+    omx_dir = tmp_path / ".omx"
+    omx_dir.mkdir()
+    (omx_dir / "web-job-audit.jsonl").write_text('{"event_type": "batch_stop"}\nnot-json\n', encoding="utf-8")
+
+    response = TestClient(app).get("/tasks/health")
+
+    assert response.status_code == 200
+    assert "Audit log is readable with corrupt lines ignored." in response.text
+    assert "1 records, 1 corrupt lines" in response.text
+
+
+def test_task_manager_health_fails_when_examples_directory_missing(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+
+    response = TestClient(app).get("/tasks/health")
+
+    assert response.status_code == 200
+    assert "Examples directory is missing." in response.text
+    assert "Template examples" in response.text
 
 
 def test_web_index_exposes_omx_team_patch_mode(monkeypatch, tmp_path: Path):

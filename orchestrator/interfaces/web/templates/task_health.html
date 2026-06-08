@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Demo Readiness</title>
+  <link rel="stylesheet" href="/static/styles.css?v=task-health-20260608">
+</head>
+<body>
+  <main class="app-layout">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <strong>Auto Evolution</strong>
+        <span>Orchestrator</span>
+      </div>
+      <nav class="side-nav">
+        <a href="/tasks">任务管理</a>
+        <a href="/tasks/audit">操作审计</a>
+        <a class="active" href="/tasks/health">Demo Readiness</a>
+      </nav>
+    </aside>
+
+    <section class="workspace">
+      <header class="workspace-header">
+        <div>
+          <h1>Demo Readiness</h1>
+          <p>只读检查当前演示环境的任务数据库、审计日志、示例、静态资源和 Docker 预设。</p>
+        </div>
+        <div class="toolbar-actions">
+          <a class="button secondary" href="/tasks">返回任务列表</a>
+          <a class="button secondary" href="/tasks/audit">操作审计</a>
+        </div>
+      </header>
+
+      <section class="summary-grid">
+        <div class="metric task-filter active">
+          <span>Overall</span>
+          <strong>{{ summary.overall }}</strong>
+        </div>
+        <div class="metric">
+          <span>Pass</span>
+          <strong>{{ summary.pass }}</strong>
+        </div>
+        <div class="metric">
+          <span>Warn</span>
+          <strong>{{ summary.warn }}</strong>
+        </div>
+        <div class="metric">
+          <span>Fail</span>
+          <strong>{{ summary.fail }}</strong>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-title compact">
+          <h2>检查项</h2>
+        </div>
+        <div class="task-table-wrap">
+          <table class="task-table">
+            <thead>
+              <tr>
+                <th>项目</th>
+                <th>状态</th>
+                <th>结果</th>
+                <th>详情</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for check in checks %}
+              <tr>
+                <td><strong>{{ check.name }}</strong></td>
+                <td><span class="status-pill {{ 'done' if check.status == 'pass' else 'failed' if check.status == 'fail' else 'severity-unknown' }}">{{ check.status }}</span></td>
+                <td>{{ check.message }}</td>
+                <td>{{ check.detail or "-" }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

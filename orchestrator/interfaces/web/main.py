@@ -4,6 +4,7 @@ import json
 import logging
 import re
 import shlex
+import sqlite3
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -434,6 +435,20 @@ def task_manager_audit_page(
             "query": query,
             "limit": active_limit,
             "limit_options": [25, 50, 100, 200],
+        },
+    )
+
+
+@app.get("/tasks/health", response_class=HTMLResponse)
+def task_manager_health_page(request: Request):
+    checks = _build_demo_readiness_checks()
+    summary = _summarize_demo_readiness(checks)
+    return TEMPLATES.TemplateResponse(
+        request,
+        "task_health.html",
+        {
+            "checks": checks,
+            "summary": summary,
         },
     )
 
@@ -2199,6 +2214,102 @@ def _append_web_job_audit(event: WebJobAuditEvent) -> None:
             exc_info=True,
         )
         return
+
+
+def _build_demo_readiness_checks() -> list[dict[str, str]]:
+    return [
+        _check_sqlite_job_db_readable(),
+        _check_task_audit_log_readable(),
+        _check_template_examples_exist(),
+        _check_web_static_assets_exist(),
+        _check_web_templates_exist(),
+        _check_docker_presets_discoverable(),
+    ]
+
+
+def _summarize_demo_readiness(checks: list[dict[str, str]]) -> dict[str, int | str]:
+    counts = {"pass": 0, "warn": 0, "fail": 0}
+    for check in checks:
+        status = check.get("status", "fail")
+        if status in counts:
+            counts[status] += 1
+    overall = "fail" if counts["fail"] else "warn" if counts["warn"] else "pass"
+    return {"overall": overall, **counts}
+
+
+def _readiness_check(name: str, status: str, message: str, detail: str = "") -> dict[str, str]:
+    return {"name": name, "status": status, "message": message, "detail": detail}
+
+
+def _check_sqlite_job_db_readable() -> dict[str, str]:
+    if not JOBS_DB_PATH.exists():
+        return _readiness_check("SQLite job database", "warn", "No Web Job database found yet.", str(JOBS_DB_PATH))
+    try:
+        uri = JOBS_DB_PATH.resolve().as_uri() + "?mode=ro"
+        with sqlite3.connect(uri, uri=True) as connection:
+            row = connection.execute(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'web_jobs'"
+            ).fetchone()
+            if not row or int(row[0]) == 0:
+                return _readiness_check("SQLite job database", "warn", "Database opens, but web_jobs table is missing.", str(JOBS_DB_PATH))
+            count_row = connection.execute("SELECT COUNT(*) FROM web_jobs").fetchone()
+        return _readiness_check("SQLite job database", "pass", "Database opens read-only.", f"{int(count_row[0]) if count_row else 0} job records")
+    except sqlite3.Error as exc:
+        return _readiness_check("SQLite job database", "fail", "Database cannot be opened read-only.", str(exc))
+
+
+def _check_task_audit_log_readable() -> dict[str, str]:
+    if not WEB_JOB_AUDIT_PATH.exists():
+        return _readiness_check("Task audit log", "warn", "Audit log does not exist yet.", str(WEB_JOB_AUDIT_PATH))
+    try:
+        lines = WEB_JOB_AUDIT_PATH.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        return _readiness_check("Task audit log", "fail", "Audit log cannot be read.", str(exc))
+    corrupt = 0
+    records = 0
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            json.loads(line)
+            records += 1
+        except json.JSONDecodeError:
+            corrupt += 1
+    if corrupt:
+        return _readiness_check("Task audit log", "warn", "Audit log is readable with corrupt lines ignored.", f"{records} records, {corrupt} corrupt lines")
+    return _readiness_check("Task audit log", "pass", "Audit log is readable.", f"{records} records")
+
+
+def _check_template_examples_exist() -> dict[str, str]:
+    examples = sorted(Path("examples").glob("task*.json"))
+    if not Path("examples").exists():
+        return _readiness_check("Template examples", "fail", "Examples directory is missing.", "examples")
+    if not examples:
+        return _readiness_check("Template examples", "warn", "Examples directory has no task*.json files.", "examples")
+    return _readiness_check("Template examples", "pass", "Template examples are discoverable.", f"{len(examples)} task files")
+
+
+def _check_web_static_assets_exist() -> dict[str, str]:
+    styles_path = WEB_DIR / "static" / "styles.css"
+    if not styles_path.exists():
+        return _readiness_check("Web static assets", "fail", "Required stylesheet is missing.", str(styles_path))
+    return _readiness_check("Web static assets", "pass", "Required stylesheet exists.", str(styles_path))
+
+
+def _check_web_templates_exist() -> dict[str, str]:
+    required = ["index.html", "tasks.html", "task_audit.html", "task_health.html", "job_status.html", "run_detail.html"]
+    missing = [name for name in required if not (WEB_DIR / "templates" / name).exists()]
+    if missing:
+        return _readiness_check("Web templates", "fail", "Required templates are missing.", ", ".join(missing))
+    return _readiness_check("Web templates", "pass", "Required templates exist.", f"{len(required)} templates")
+
+
+def _check_docker_presets_discoverable() -> dict[str, str]:
+    presets = list_command_presets()
+    docker_presets = [str(preset.get("id") or "") for preset in presets if str(preset.get("id") or "") != "custom"]
+    if not docker_presets:
+        return _readiness_check("Docker command presets", "warn", "No Docker command presets are configured.", "")
+    return _readiness_check("Docker command presets", "pass", "Docker command presets are discoverable.", ", ".join(docker_presets))
 
 
 def _job_snapshot(job: dict[str, Any] | None) -> dict[str, str]:
