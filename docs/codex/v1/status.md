@@ -316,3 +316,10 @@
 - 摘要：`/tasks/audit` 新增事件类型筛选，可按 `batch_stop`、`batch_rerun`、`batch_delete` 等审计事件过滤最近记录；同时将新审计模板整理为可读中文。
 - 产物：`orchestrator/interfaces/web/main.py`、`orchestrator/interfaces/web/templates/task_audit.html`、`tests/test_web_ui.py`。
 - 验证：`python -m pytest -q tests/test_web_ui.py -k "task_manager or audit"` 通过，`8 passed, 44 deselected`；`python -m pytest -q tests/test_web_ui.py` 通过，`52 passed`；`git diff --check` 通过。
+
+# 2026-06-08 Web UI Task Manager Audit Search
+
+- 状态：已完成。
+- 摘要：`/tasks/audit` 新增关键词搜索，可按 Job ID、Run ID、事件类型、消息、请求上下文和原因明细过滤最近审计记录，并保留事件类型筛选组合使用。
+- 产物：`orchestrator/interfaces/web/main.py`、`orchestrator/interfaces/web/templates/task_audit.html`、`tests/test_web_ui.py`。
+- 验证：`python -m pytest -q tests/test_web_ui.py -k "task_manager or audit"` 通过，`8 passed, 44 deselected`；`python -m py_compile orchestrator/interfaces/web/main.py` 通过；`python -m pytest -q tests/test_web_ui.py` 通过，`52 passed`；`git diff --check` 通过。

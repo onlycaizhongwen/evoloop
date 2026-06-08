@@ -1365,6 +1365,17 @@ def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
     assert invalid_filter_page.status_code == 200
     assert '<option value="all" selected>All (3)</option>' in invalid_filter_page.text
 
+    reason_search_page = client.get("/tasks/audit?q=missing+task.json")
+    assert reason_search_page.status_code == 200
+    assert "显示 1 / 3 条任务管理操作记录。" in reason_search_page.text
+    assert 'name="q" value="missing task.json"' in reason_search_page.text
+    assert "batch_rerun" in reason_search_page.text
+
+    job_search_page = client.get("/tasks/audit?q=job-batch-failed")
+    assert job_search_page.status_code == 200
+    assert "batch_delete" in job_search_page.text
+    assert "job-batch-failed" in job_search_page.text
+
 
 def test_task_manager_url_preserves_query():
     url = _tasks_url(status="running", quality="failed", rerun="available", page=2, page_size=20, q="abc def")

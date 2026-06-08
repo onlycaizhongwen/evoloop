@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>任务操作审计</title>
-  <link rel="stylesheet" href="/static/styles.css?v=task-audit-20260608-filter">
+  <link rel="stylesheet" href="/static/styles.css?v=task-audit-20260608-search">
 </head>
 <body>
   <main class="app-layout">
@@ -40,6 +40,9 @@
               <option value="{{ event_type }}" {% if active_event_type == event_type %}selected{% endif %}>{{ event_type }}</option>
               {% endfor %}
             </select>
+          </label>
+          <label>搜索
+            <input name="q" value="{{ query }}" placeholder="Job ID、Run ID、事件、原因">
           </label>
           <div class="toolbar-actions">
             <button type="submit">筛选</button>

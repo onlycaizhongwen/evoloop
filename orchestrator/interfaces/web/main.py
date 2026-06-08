@@ -377,11 +377,13 @@ def task_manager_audit_markdown():
 
 
 @app.get("/tasks/audit", response_class=HTMLResponse)
-def task_manager_audit_page(request: Request, event_type: str = "all"):
+def task_manager_audit_page(request: Request, event_type: str = "all", q: str = ""):
     records = WebJobAuditLog(WEB_JOB_AUDIT_PATH).list_recent(limit=50)
     event_types = _task_manager_audit_event_types(records)
     active_event_type = event_type if event_type == "all" or event_type in event_types else "all"
     filtered_records = _filter_task_manager_audit_records(records, active_event_type)
+    query = q.strip()
+    filtered_records = _search_task_manager_audit_records(filtered_records, query)
     return TEMPLATES.TemplateResponse(
         request,
         "task_audit.html",
@@ -391,6 +393,7 @@ def task_manager_audit_page(request: Request, event_type: str = "all"):
             "filtered_total": len(filtered_records),
             "event_types": event_types,
             "active_event_type": active_event_type,
+            "query": query,
         },
     )
 
@@ -2139,6 +2142,34 @@ def _filter_task_manager_audit_records(records: list[dict[str, Any]], event_type
     if event_type == "all":
         return records
     return [record for record in records if str(record.get("event_type") or "") == event_type]
+
+
+def _search_task_manager_audit_records(records: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
+    if not query:
+        return records
+    needle = query.lower()
+    return [record for record in records if needle in _task_manager_audit_search_text(record)]
+
+
+def _task_manager_audit_search_text(record: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for key in [
+        "event_type",
+        "created_at",
+        "actor",
+        "message",
+        "selected_job_ids",
+        "processed_job_ids",
+        "skipped_job_ids",
+        "failed_job_ids",
+        "run_ids",
+    ]:
+        parts.append(str(record.get(key) or ""))
+    for nested_key in ["request_context", "details"]:
+        value = record.get(nested_key)
+        if isinstance(value, dict):
+            parts.extend(f"{key} {nested_value}" for key, nested_value in value.items())
+    return " ".join(parts).lower()
 
 
 def _build_task_manager_audit_view_record(record: dict[str, Any]) -> dict[str, str]:
