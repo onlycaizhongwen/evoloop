@@ -943,7 +943,7 @@ def test_task_manager_lists_and_filters_jobs(monkeypatch, tmp_path: Path):
     assert "Docker Patch JSON" in response.text
     assert "<table" in response.text
     assert 'id="task-batch-form"' in response.text
-    assert 'href="/tasks/audit.md">操作审计</a>' in response.text
+    assert 'href="/tasks/audit">操作审计</a>' in response.text
     assert 'data-select-all-tasks' in response.text
     assert 'name="job_ids"' in response.text
     assert '<option value="stop">停止运行中任务</option>' in response.text
@@ -1345,6 +1345,14 @@ def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
     assert "# Task Manager Audit" in audit_response.text
     assert "batch_delete" in audit_response.text
     assert "job-batch-done" in audit_response.text
+
+    audit_page = client.get("/tasks/audit")
+    assert audit_page.status_code == 200
+    assert "任务操作审计" in audit_page.text
+    assert "batch_delete" in audit_page.text
+    assert "job-batch-done" in audit_page.text
+    assert "missing task.json" in audit_page.text
+    assert 'href="/tasks/audit.md">导出 Markdown</a>' in audit_page.text
 
 
 def test_task_manager_url_preserves_query():

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>任务操作审计</title>
+  <link rel="stylesheet" href="/static/styles.css?v=task-audit-20260608">
+</head>
+<body>
+  <main class="app-layout">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <strong>Auto Evolution</strong>
+        <span>Orchestrator</span>
+      </div>
+      <nav class="side-nav">
+        <a href="/tasks">任务管理</a>
+        <a class="active" href="/tasks/audit">操作审计</a>
+      </nav>
+    </aside>
+
+    <section class="workspace">
+      <header class="workspace-header">
+        <div>
+          <h1>任务操作审计</h1>
+          <p>最近 {{ total }} 条任务管理操作记录。</p>
+        </div>
+        <div class="toolbar-actions">
+          <a class="button secondary" href="/tasks">返回任务列表</a>
+          <a class="button secondary" href="/tasks/audit.md">导出 Markdown</a>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="task-table-wrap">
+          <table class="task-table">
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>事件</th>
+                <th>结果</th>
+                <th>Job</th>
+                <th>Run</th>
+                <th>原因</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for record in records %}
+              <tr>
+                <td>{{ record.created_at }}</td>
+                <td>
+                  <strong>{{ record.event_type }}</strong>
+                  <span class="muted-line">{{ record.message }}</span>
+                  <span class="muted-line">actor: {{ record.actor }}</span>
+                </td>
+                <td>
+                  <span class="status-pill done">成功 {{ record.processed_count }}</span>
+                  <span class="status-pill severity-unknown">跳过 {{ record.skipped_count }}</span>
+                  <span class="status-pill failed">失败 {{ record.failed_count }}</span>
+                  <span class="muted-line">选择 {{ record.selected_count }}</span>
+                </td>
+                <td>
+                  <span class="muted-line">selected: {{ record.selected_jobs }}</span>
+                  <span class="muted-line">processed: {{ record.processed_jobs }}</span>
+                  <span class="muted-line">skipped: {{ record.skipped_jobs }}</span>
+                  <span class="muted-line">failed: {{ record.failed_jobs }}</span>
+                </td>
+                <td>{{ record.run_ids }}</td>
+                <td>{{ record.reasons }}</td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="6" class="empty-cell">暂无任务操作审计记录。</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

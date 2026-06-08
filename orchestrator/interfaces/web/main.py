@@ -376,6 +376,19 @@ def task_manager_audit_markdown():
     )
 
 
+@app.get("/tasks/audit", response_class=HTMLResponse)
+def task_manager_audit_page(request: Request):
+    records = WebJobAuditLog(WEB_JOB_AUDIT_PATH).list_recent(limit=50)
+    return TEMPLATES.TemplateResponse(
+        request,
+        "task_audit.html",
+        {
+            "records": [_build_task_manager_audit_view_record(record) for record in records],
+            "total": len(records),
+        },
+    )
+
+
 @app.post("/tasks/batch")
 def batch_tasks(
     action: Annotated[str, Form()],
@@ -2110,6 +2123,32 @@ def _build_task_manager_audit_markdown(records: list[dict[str, Any]]) -> str:
             ]
         )
     return "\n".join(lines)
+
+
+def _build_task_manager_audit_view_record(record: dict[str, Any]) -> dict[str, str]:
+    selected = list(record.get("selected_job_ids") or [])
+    processed = list(record.get("processed_job_ids") or [])
+    skipped = list(record.get("skipped_job_ids") or [])
+    failed = list(record.get("failed_job_ids") or [])
+    run_ids = list(record.get("run_ids") or [])
+    details = record.get("details") if isinstance(record.get("details"), dict) else {}
+    reasons = details.get("reasons") if isinstance(details.get("reasons"), dict) else {}
+    return {
+        "event_type": str(record.get("event_type") or ""),
+        "created_at": str(record.get("created_at") or ""),
+        "actor": str(record.get("actor") or ""),
+        "message": str(record.get("message") or ""),
+        "selected_count": str(len(selected)),
+        "processed_count": str(len(processed)),
+        "skipped_count": str(len(skipped)),
+        "failed_count": str(len(failed)),
+        "selected_jobs": ", ".join(str(value) for value in selected) or "-",
+        "processed_jobs": ", ".join(str(value) for value in processed) or "-",
+        "skipped_jobs": ", ".join(str(value) for value in skipped) or "-",
+        "failed_jobs": ", ".join(str(value) for value in failed) or "-",
+        "run_ids": ", ".join(str(value) for value in run_ids) or "-",
+        "reasons": "; ".join(f"{key}: {value}" for key, value in reasons.items()) or "-",
+    }
 
 
 def _list_task_templates_with_recent_jobs(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:

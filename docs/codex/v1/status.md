@@ -302,3 +302,10 @@
 - 产物：`orchestrator/infrastructure/persistence/web_job_audit_log.py`、`orchestrator/interfaces/web/main.py`、`orchestrator/interfaces/web/templates/tasks.html`、`tests/test_web_ui.py`、`docs/codex/v1/trace/web-ui-task-manager-operational-audit-trace.md`。
 - 验证：`python -m pytest -q tests/test_web_ui.py -k "task_manager or audit"` 通过，`8 passed, 44 deselected`；`python -m py_compile orchestrator/interfaces/web/main.py orchestrator/infrastructure/persistence/web_job_audit_log.py` 通过；`python -m pytest -q tests/test_web_ui.py` 通过，`52 passed`；`python -m pytest -q` 通过，`137 passed`。
 - Trace：`docs/codex/v1/trace/web-ui-task-manager-operational-audit-trace.md`，结论为计划、实现、测试和状态记录已闭环，剩余风险为 JSONL 暂未轮转且审计写入失败静默忽略。
+
+# 2026-06-08 Web UI Task Manager Audit Page
+
+- 状态：已完成。
+- 摘要：新增 `/tasks/audit` 可浏览审计页，直接展示最近 50 条任务操作审计记录，包括事件类型、成功/跳过/失败数量、Job 明细、Run 关联和跳过原因，并保留 `/tasks/audit.md` Markdown 导出。
+- 产物：`orchestrator/interfaces/web/main.py`、`orchestrator/interfaces/web/templates/task_audit.html`、`orchestrator/interfaces/web/templates/tasks.html`、`tests/test_web_ui.py`。
+- 验证：`python -m pytest -q tests/test_web_ui.py -k "task_manager or audit"` 通过，`8 passed, 44 deselected`；`python -m py_compile orchestrator/interfaces/web/main.py orchestrator/infrastructure/persistence/web_job_audit_log.py` 通过；`python -m pytest -q tests/test_web_ui.py` 通过，`52 passed`。
