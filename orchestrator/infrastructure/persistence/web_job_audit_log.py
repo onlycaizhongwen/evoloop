@@ -41,11 +41,20 @@ class WebJobAuditEvent:
 
 
 class WebJobAuditLog:
-    def __init__(self, path: Path | str = Path(".omx/web-job-audit.jsonl")) -> None:
+    def __init__(
+        self,
+        path: Path | str = Path(".omx/web-job-audit.jsonl"),
+        *,
+        max_bytes: int | None = 5 * 1024 * 1024,
+        archive_count: int = 5,
+    ) -> None:
         self.path = Path(path)
+        self.max_bytes = max_bytes
+        self.archive_count = max(0, archive_count)
 
     def append(self, event: WebJobAuditEvent) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._rotate_if_needed()
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(event.to_record(), ensure_ascii=False, sort_keys=True))
             handle.write("\n")
@@ -65,3 +74,27 @@ class WebJobAuditLog:
             if isinstance(record, dict):
                 records.append(record)
         return records[-limit:][::-1]
+
+    def _rotate_if_needed(self) -> None:
+        if self.max_bytes is None or self.max_bytes <= 0:
+            return
+        if not self.path.exists() or self.path.stat().st_size < self.max_bytes:
+            return
+        self.path.replace(self._archive_path())
+        self._prune_archives()
+
+    def _archive_path(self) -> Path:
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
+        return self.path.with_name(f"{self.path.stem}.{timestamp}{self.path.suffix}")
+
+    def _prune_archives(self) -> None:
+        if self.archive_count <= 0:
+            for archive_path in self._archive_paths():
+                archive_path.unlink()
+            return
+        for archive_path in self._archive_paths()[self.archive_count :]:
+            archive_path.unlink()
+
+    def _archive_paths(self) -> list[Path]:
+        pattern = f"{self.path.stem}.*{self.path.suffix}"
+        return sorted(self.path.parent.glob(pattern), reverse=True)

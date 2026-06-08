@@ -378,3 +378,10 @@
 - 计划文档：`docs/codex/v1/plans/web-ui-operational-maintenance-hardening.md`。
 - 推荐顺序：Audit Log Retention And Rotation -> Task Manager Maintenance Actions -> Demo Readiness Health Check。
 - 验证计划：`python -m pytest -q tests/test_web_ui.py -k "task_manager or audit"`；`python -m py_compile orchestrator/interfaces/web/main.py orchestrator/infrastructure/persistence/web_job_audit_log.py`；`python -m pytest -q tests/test_web_ui.py`；`python -m pytest -q`；`git diff --check`。
+
+# 2026-06-08 Web UI Audit Log Retention And Rotation
+
+- 状态：已完成。
+- 摘要：`WebJobAuditLog` 新增 active JSONL 大小阈值和归档保留数量，写入新审计事件前会在超过阈值时轮转 `.omx/web-job-audit.jsonl`，并保留当前页面/导出只读 active 文件的语义。
+- 产物：`orchestrator/infrastructure/persistence/web_job_audit_log.py`、`tests/test_web_job_audit_log.py`、`docs/codex/v1/trace/web-ui-operational-maintenance-hardening-trace.md`。
+- 验证：`python -m pytest -q tests/test_web_job_audit_log.py` 通过，`5 passed`；`python -m pytest -q tests/test_web_ui.py -k "task_manager or audit" tests/test_web_job_audit_log.py` 通过，`14 passed, 44 deselected`；`python -m py_compile orchestrator/infrastructure/persistence/web_job_audit_log.py orchestrator/interfaces/web/main.py` 通过；`python -m pytest -q tests/test_web_ui.py` 通过，`53 passed`；`python -m pytest -q` 通过，`143 passed`；`git diff --check` 通过。
