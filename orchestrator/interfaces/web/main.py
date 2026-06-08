@@ -377,12 +377,20 @@ def task_manager_audit_markdown():
 
 
 @app.get("/tasks/audit", response_class=HTMLResponse)
-def task_manager_audit_page(request: Request, event_type: str = "all", q: str = "", limit: int = 50):
+def task_manager_audit_page(
+    request: Request,
+    event_type: str = "all",
+    outcome: str = "all",
+    q: str = "",
+    limit: int = 50,
+):
     active_limit = _normalize_task_manager_audit_limit(limit)
     records = WebJobAuditLog(WEB_JOB_AUDIT_PATH).list_recent(limit=active_limit)
     event_types = _task_manager_audit_event_types(records)
     active_event_type = event_type if event_type == "all" or event_type in event_types else "all"
     filtered_records = _filter_task_manager_audit_records(records, active_event_type)
+    active_outcome = outcome if outcome in {"all", "skipped", "failed", "clean"} else "all"
+    filtered_records = _filter_task_manager_audit_records_by_outcome(filtered_records, active_outcome)
     query = q.strip()
     filtered_records = _search_task_manager_audit_records(filtered_records, query)
     return TEMPLATES.TemplateResponse(
@@ -394,6 +402,13 @@ def task_manager_audit_page(request: Request, event_type: str = "all", q: str = 
             "filtered_total": len(filtered_records),
             "event_types": event_types,
             "active_event_type": active_event_type,
+            "active_outcome": active_outcome,
+            "outcome_options": [
+                {"value": "all", "label": "All"},
+                {"value": "skipped", "label": "Has skipped"},
+                {"value": "failed", "label": "Has failed"},
+                {"value": "clean", "label": "No skipped or failed"},
+            ],
             "query": query,
             "limit": active_limit,
             "limit_options": [25, 50, 100, 200],
@@ -2151,6 +2166,22 @@ def _filter_task_manager_audit_records(records: list[dict[str, Any]], event_type
     if event_type == "all":
         return records
     return [record for record in records if str(record.get("event_type") or "") == event_type]
+
+
+def _filter_task_manager_audit_records_by_outcome(records: list[dict[str, Any]], outcome: str) -> list[dict[str, Any]]:
+    if outcome == "all":
+        return records
+    if outcome == "skipped":
+        return [record for record in records if record.get("skipped_job_ids")]
+    if outcome == "failed":
+        return [record for record in records if record.get("failed_job_ids")]
+    if outcome == "clean":
+        return [
+            record
+            for record in records
+            if not record.get("skipped_job_ids") and not record.get("failed_job_ids")
+        ]
+    return records
 
 
 def _search_task_manager_audit_records(records: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:

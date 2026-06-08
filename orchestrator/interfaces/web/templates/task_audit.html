@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>任务操作审计</title>
-  <link rel="stylesheet" href="/static/styles.css?v=task-audit-20260608-limit">
+  <link rel="stylesheet" href="/static/styles.css?v=task-audit-20260608-outcome">
 </head>
 <body>
   <main class="app-layout">
@@ -41,8 +41,15 @@
               {% endfor %}
             </select>
           </label>
+          <label>结果
+            <select name="outcome">
+              {% for option in outcome_options %}
+              <option value="{{ option.value }}" {% if active_outcome == option.value %}selected{% endif %}>{{ option.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
           <label>搜索
-            <input name="q" value="{{ query }}" placeholder="Job ID、Run ID、事件、原因">
+            <input name="q" value="{{ query }}" placeholder="Job ID、Run ID、事件或原因">
           </label>
           <label>最近
             <select name="limit">

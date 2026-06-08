@@ -1355,6 +1355,8 @@ def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
     assert "missing task.json" in audit_page.text
     assert 'href="/tasks/audit.md">导出 Markdown</a>' in audit_page.text
     assert '<option value="batch_rerun"' in audit_page.text
+    assert '<option value="all" selected>All</option>' in audit_page.text
+    assert '<option value="skipped" >Has skipped</option>' in audit_page.text
 
     rerun_audit_page = client.get("/tasks/audit?event_type=batch_rerun")
     assert rerun_audit_page.status_code == 200
@@ -1362,9 +1364,30 @@ def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
     assert '<option value="batch_rerun" selected>batch_rerun</option>' in rerun_audit_page.text
     assert "batch_rerun" in rerun_audit_page.text
 
+    skipped_audit_page = client.get("/tasks/audit?outcome=skipped")
+    assert skipped_audit_page.status_code == 200
+    assert "2 / 3" in skipped_audit_page.text
+    assert '<option value="skipped" selected>Has skipped</option>' in skipped_audit_page.text
+    assert "<strong>batch_stop</strong>" in skipped_audit_page.text
+    assert "<strong>batch_rerun</strong>" in skipped_audit_page.text
+    assert "<strong>batch_delete</strong>" not in skipped_audit_page.text
+
+    clean_audit_page = client.get("/tasks/audit?outcome=clean")
+    assert clean_audit_page.status_code == 200
+    assert "1 / 3" in clean_audit_page.text
+    assert '<option value="clean" selected>No skipped or failed</option>' in clean_audit_page.text
+    assert "<strong>batch_delete</strong>" in clean_audit_page.text
+    assert "<strong>batch_stop</strong>" not in clean_audit_page.text
+    assert "<strong>batch_rerun</strong>" not in clean_audit_page.text
+
     invalid_filter_page = client.get("/tasks/audit?event_type=unknown")
     assert invalid_filter_page.status_code == 200
     assert '<option value="all" selected>All (3)</option>' in invalid_filter_page.text
+
+    invalid_outcome_page = client.get("/tasks/audit?outcome=unknown")
+    assert invalid_outcome_page.status_code == 200
+    assert '<option value="all" selected>All</option>' in invalid_outcome_page.text
+    assert "3 / 3" in invalid_outcome_page.text
 
     limit_page = client.get("/tasks/audit?limit=25")
     assert limit_page.status_code == 200
