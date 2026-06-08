@@ -1353,6 +1353,17 @@ def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
     assert "job-batch-done" in audit_page.text
     assert "missing task.json" in audit_page.text
     assert 'href="/tasks/audit.md">导出 Markdown</a>' in audit_page.text
+    assert '<option value="batch_rerun"' in audit_page.text
+
+    rerun_audit_page = client.get("/tasks/audit?event_type=batch_rerun")
+    assert rerun_audit_page.status_code == 200
+    assert "显示 1 / 3 条任务管理操作记录。" in rerun_audit_page.text
+    assert '<option value="batch_rerun" selected>batch_rerun</option>' in rerun_audit_page.text
+    assert "batch_rerun" in rerun_audit_page.text
+
+    invalid_filter_page = client.get("/tasks/audit?event_type=unknown")
+    assert invalid_filter_page.status_code == 200
+    assert '<option value="all" selected>All (3)</option>' in invalid_filter_page.text
 
 
 def test_task_manager_url_preserves_query():

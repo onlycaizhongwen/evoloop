@@ -26,6 +26,12 @@
 - `python -m py_compile orchestrator/interfaces/web/main.py orchestrator/infrastructure/persistence/web_job_audit_log.py`：通过。
 - `python -m pytest -q tests/test_web_ui.py`：52 passed。
 
+## 2026-06-08 审计筛选增量
+
+- `/tasks/audit` 新增 `event_type` 筛选，支持在最近 50 条审计记录内按事件类型查看。
+- 无效事件类型会回退到 `all`，避免空白或误导性视图。
+- 新增测试覆盖 `batch_rerun` 筛选和无效筛选回退。
+
 ## 剩余风险
 
 - 审计文件第一版为追加式 JSONL，未做轮转；当前 Markdown 导出只读取最近 50 条，避免大文件影响页面响应。

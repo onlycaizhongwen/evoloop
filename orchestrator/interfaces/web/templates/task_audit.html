@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>任务操作审计</title>
-  <link rel="stylesheet" href="/static/styles.css?v=task-audit-20260608">
+  <link rel="stylesheet" href="/static/styles.css?v=task-audit-20260608-filter">
 </head>
 <body>
   <main class="app-layout">
@@ -23,7 +23,7 @@
       <header class="workspace-header">
         <div>
           <h1>任务操作审计</h1>
-          <p>最近 {{ total }} 条任务管理操作记录。</p>
+          <p>显示 {{ filtered_total }} / {{ total }} 条任务管理操作记录。</p>
         </div>
         <div class="toolbar-actions">
           <a class="button secondary" href="/tasks">返回任务列表</a>
@@ -32,6 +32,21 @@
       </header>
 
       <section class="panel">
+        <form class="task-toolbar" method="get" action="/tasks/audit">
+          <label>事件类型
+            <select name="event_type">
+              <option value="all" {% if active_event_type == "all" %}selected{% endif %}>All ({{ total }})</option>
+              {% for event_type in event_types %}
+              <option value="{{ event_type }}" {% if active_event_type == event_type %}selected{% endif %}>{{ event_type }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <div class="toolbar-actions">
+            <button type="submit">筛选</button>
+            <a class="button secondary" href="/tasks/audit">清空</a>
+          </div>
+        </form>
+
         <div class="task-table-wrap">
           <table class="task-table">
             <thead>

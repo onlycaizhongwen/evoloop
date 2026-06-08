@@ -377,14 +377,20 @@ def task_manager_audit_markdown():
 
 
 @app.get("/tasks/audit", response_class=HTMLResponse)
-def task_manager_audit_page(request: Request):
+def task_manager_audit_page(request: Request, event_type: str = "all"):
     records = WebJobAuditLog(WEB_JOB_AUDIT_PATH).list_recent(limit=50)
+    event_types = _task_manager_audit_event_types(records)
+    active_event_type = event_type if event_type == "all" or event_type in event_types else "all"
+    filtered_records = _filter_task_manager_audit_records(records, active_event_type)
     return TEMPLATES.TemplateResponse(
         request,
         "task_audit.html",
         {
-            "records": [_build_task_manager_audit_view_record(record) for record in records],
+            "records": [_build_task_manager_audit_view_record(record) for record in filtered_records],
             "total": len(records),
+            "filtered_total": len(filtered_records),
+            "event_types": event_types,
+            "active_event_type": active_event_type,
         },
     )
 
@@ -2123,6 +2129,16 @@ def _build_task_manager_audit_markdown(records: list[dict[str, Any]]) -> str:
             ]
         )
     return "\n".join(lines)
+
+
+def _task_manager_audit_event_types(records: list[dict[str, Any]]) -> list[str]:
+    return sorted({str(record.get("event_type") or "") for record in records if record.get("event_type")})
+
+
+def _filter_task_manager_audit_records(records: list[dict[str, Any]], event_type: str) -> list[dict[str, Any]]:
+    if event_type == "all":
+        return records
+    return [record for record in records if str(record.get("event_type") or "") == event_type]
 
 
 def _build_task_manager_audit_view_record(record: dict[str, Any]) -> dict[str, str]:

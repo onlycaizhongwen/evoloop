@@ -309,3 +309,10 @@
 - 摘要：新增 `/tasks/audit` 可浏览审计页，直接展示最近 50 条任务操作审计记录，包括事件类型、成功/跳过/失败数量、Job 明细、Run 关联和跳过原因，并保留 `/tasks/audit.md` Markdown 导出。
 - 产物：`orchestrator/interfaces/web/main.py`、`orchestrator/interfaces/web/templates/task_audit.html`、`orchestrator/interfaces/web/templates/tasks.html`、`tests/test_web_ui.py`。
 - 验证：`python -m pytest -q tests/test_web_ui.py -k "task_manager or audit"` 通过，`8 passed, 44 deselected`；`python -m py_compile orchestrator/interfaces/web/main.py orchestrator/infrastructure/persistence/web_job_audit_log.py` 通过；`python -m pytest -q tests/test_web_ui.py` 通过，`52 passed`。
+
+# 2026-06-08 Web UI Task Manager Audit Filter
+
+- 状态：已完成。
+- 摘要：`/tasks/audit` 新增事件类型筛选，可按 `batch_stop`、`batch_rerun`、`batch_delete` 等审计事件过滤最近记录；同时将新审计模板整理为可读中文。
+- 产物：`orchestrator/interfaces/web/main.py`、`orchestrator/interfaces/web/templates/task_audit.html`、`tests/test_web_ui.py`。
+- 验证：`python -m pytest -q tests/test_web_ui.py -k "task_manager or audit"` 通过，`8 passed, 44 deselected`；`python -m pytest -q tests/test_web_ui.py` 通过，`52 passed`；`git diff --check` 通过。
