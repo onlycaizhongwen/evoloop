@@ -1367,10 +1367,17 @@ def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
     skipped_audit_page = client.get("/tasks/audit?outcome=skipped")
     assert skipped_audit_page.status_code == 200
     assert "2 / 3" in skipped_audit_page.text
+    assert 'href="/tasks/audit.md?outcome=skipped">导出 Markdown</a>' in skipped_audit_page.text
     assert '<option value="skipped" selected>Has skipped</option>' in skipped_audit_page.text
     assert "<strong>batch_stop</strong>" in skipped_audit_page.text
     assert "<strong>batch_rerun</strong>" in skipped_audit_page.text
     assert "<strong>batch_delete</strong>" not in skipped_audit_page.text
+
+    skipped_audit_export = client.get("/tasks/audit.md?outcome=skipped")
+    assert skipped_audit_export.status_code == 200
+    assert "batch_stop" in skipped_audit_export.text
+    assert "batch_rerun" in skipped_audit_export.text
+    assert "batch_delete" not in skipped_audit_export.text
 
     clean_audit_page = client.get("/tasks/audit?outcome=clean")
     assert clean_audit_page.status_code == 200
@@ -1406,11 +1413,19 @@ def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
     empty_filter_page = client.get("/tasks/audit?event_type=batch_delete&outcome=skipped&q=missing+task.json")
     assert empty_filter_page.status_code == 200
     assert "0 / 3" in empty_filter_page.text
+    assert (
+        'href="/tasks/audit.md?event_type=batch_delete&amp;outcome=skipped&amp;q=missing+task.json">导出 Markdown</a>'
+        in empty_filter_page.text
+    )
     assert "当前筛选没有匹配的审计记录" in empty_filter_page.text
     assert "事件类型: batch_delete" in empty_filter_page.text
     assert "结果: Has skipped" in empty_filter_page.text
     assert "搜索: missing task.json" in empty_filter_page.text
     assert 'href="/tasks/audit">清空筛选</a>' in empty_filter_page.text
+
+    empty_filter_export = client.get("/tasks/audit.md?event_type=batch_delete&outcome=skipped&q=missing+task.json")
+    assert empty_filter_export.status_code == 200
+    assert "No task manager audit events recorded." in empty_filter_export.text
 
     job_search_page = client.get("/tasks/audit?q=job-batch-failed")
     assert job_search_page.status_code == 200

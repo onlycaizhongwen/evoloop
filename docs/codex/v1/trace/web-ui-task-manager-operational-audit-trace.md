@@ -62,3 +62,10 @@
 - 无审计记录时仍显示原始空状态，避免把“没有任何审计事件”和“筛选后无结果”混淆。
 - 新增测试覆盖 `event_type=batch_delete`、`outcome=skipped`、`q=missing task.json` 的无命中组合。
 - 该增量只影响页面展示，不修改 JSONL 审计写入、读取数量、Markdown 导出或删除边界。
+
+## 2026-06-08 筛选态 Markdown 导出增量
+
+- `/tasks/audit.md` 新增 `event_type`、`outcome`、`q`、`limit` 查询参数，和 `/tasks/audit` 复用同一套最近记录读取与过滤逻辑。
+- `/tasks/audit` 的 `导出 Markdown` 链接会保留当前筛选条件；无筛选时仍输出原始 `/tasks/audit.md` 链接。
+- 无命中筛选导出仍返回合法 Markdown 空结果，不修改 JSONL 审计文件，也不改变默认 Markdown 导出的 50 条语义。
+- 新增测试覆盖筛选页导出链接、按 outcome 导出的 Markdown 内容和无命中筛选导出。

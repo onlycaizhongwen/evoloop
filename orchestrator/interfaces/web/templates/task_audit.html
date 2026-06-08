@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>任务操作审计</title>
-  <link rel="stylesheet" href="/static/styles.css?v=task-audit-20260608-empty-filter">
+  <link rel="stylesheet" href="/static/styles.css?v=task-audit-20260608-export-filter">
 </head>
 <body>
   <main class="app-layout">
@@ -27,7 +27,7 @@
         </div>
         <div class="toolbar-actions">
           <a class="button secondary" href="/tasks">返回任务列表</a>
-          <a class="button secondary" href="/tasks/audit.md">导出 Markdown</a>
+          <a class="button secondary" href="{{ audit_markdown_url }}">导出 Markdown</a>
         </div>
       </header>
 

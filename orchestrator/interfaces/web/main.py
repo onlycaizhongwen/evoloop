@@ -367,8 +367,15 @@ def task_manager(
 
 
 @app.get("/tasks/audit.md")
-def task_manager_audit_markdown():
-    records = WebJobAuditLog(WEB_JOB_AUDIT_PATH).list_recent(limit=50)
+def task_manager_audit_markdown(event_type: str = "all", outcome: str = "all", q: str = "", limit: int = 50):
+    records, _total, _event_types, _active_event_type, _active_outcome, _query, _active_filters = (
+        _filtered_task_manager_audit_records(
+            event_type,
+            outcome,
+            q,
+            limit,
+        )
+    )
     return PlainTextResponse(
         _build_task_manager_audit_markdown(records),
         media_type="text/markdown",
@@ -384,37 +391,42 @@ def task_manager_audit_page(
     q: str = "",
     limit: int = 50,
 ):
-    active_limit = _normalize_task_manager_audit_limit(limit)
-    records = WebJobAuditLog(WEB_JOB_AUDIT_PATH).list_recent(limit=active_limit)
-    event_types = _task_manager_audit_event_types(records)
-    active_event_type = event_type if event_type == "all" or event_type in event_types else "all"
-    filtered_records = _filter_task_manager_audit_records(records, active_event_type)
-    active_outcome = outcome if outcome in {"all", "skipped", "failed", "clean"} else "all"
     outcome_options = [
         {"value": "all", "label": "All"},
         {"value": "skipped", "label": "Has skipped"},
         {"value": "failed", "label": "Has failed"},
         {"value": "clean", "label": "No skipped or failed"},
     ]
-    active_outcome_label = next(
-        option["label"] for option in outcome_options if option["value"] == active_outcome
+    (
+        filtered_records,
+        total,
+        event_types,
+        active_event_type,
+        active_outcome,
+        query,
+        active_filters,
+    ) = _filtered_task_manager_audit_records(
+        event_type,
+        outcome,
+        q,
+        limit,
+        outcome_options=outcome_options,
     )
-    filtered_records = _filter_task_manager_audit_records_by_outcome(filtered_records, active_outcome)
-    query = q.strip()
-    filtered_records = _search_task_manager_audit_records(filtered_records, query)
-    active_filters = _task_manager_audit_active_filters(active_event_type, active_outcome, active_outcome_label, query)
+    active_limit = _normalize_task_manager_audit_limit(limit)
+    audit_markdown_url = _task_manager_audit_markdown_url(active_event_type, active_outcome, query, active_limit)
     return TEMPLATES.TemplateResponse(
         request,
         "task_audit.html",
         {
             "records": [_build_task_manager_audit_view_record(record) for record in filtered_records],
-            "total": len(records),
+            "total": total,
             "filtered_total": len(filtered_records),
             "event_types": event_types,
             "active_event_type": active_event_type,
             "active_outcome": active_outcome,
             "outcome_options": outcome_options,
             "active_filters": active_filters,
+            "audit_markdown_url": audit_markdown_url,
             "query": query,
             "limit": active_limit,
             "limit_options": [25, 50, 100, 200],
@@ -2156,6 +2168,52 @@ def _build_task_manager_audit_markdown(records: list[dict[str, Any]]) -> str:
             ]
         )
     return "\n".join(lines)
+
+
+def _filtered_task_manager_audit_records(
+    event_type: str,
+    outcome: str,
+    query: str,
+    limit: int,
+    outcome_options: list[dict[str, str]] | None = None,
+) -> tuple[list[dict[str, Any]], int, list[str], str, str, str, list[str]]:
+    active_limit = _normalize_task_manager_audit_limit(limit)
+    records = WebJobAuditLog(WEB_JOB_AUDIT_PATH).list_recent(limit=active_limit)
+    event_types = _task_manager_audit_event_types(records)
+    active_event_type = event_type if event_type == "all" or event_type in event_types else "all"
+    active_outcome = outcome if outcome in {"all", "skipped", "failed", "clean"} else "all"
+    options = outcome_options or [
+        {"value": "all", "label": "All"},
+        {"value": "skipped", "label": "Has skipped"},
+        {"value": "failed", "label": "Has failed"},
+        {"value": "clean", "label": "No skipped or failed"},
+    ]
+    active_outcome_label = next(option["label"] for option in options if option["value"] == active_outcome)
+    filtered_records = _filter_task_manager_audit_records(records, active_event_type)
+    filtered_records = _filter_task_manager_audit_records_by_outcome(filtered_records, active_outcome)
+    active_query = query.strip()
+    filtered_records = _search_task_manager_audit_records(filtered_records, active_query)
+    active_filters = _task_manager_audit_active_filters(
+        active_event_type,
+        active_outcome,
+        active_outcome_label,
+        active_query,
+    )
+    return filtered_records, len(records), event_types, active_event_type, active_outcome, active_query, active_filters
+
+
+def _task_manager_audit_markdown_url(event_type: str, outcome: str, query: str, limit: int) -> str:
+    params: dict[str, str | int] = {}
+    if event_type != "all":
+        params["event_type"] = event_type
+    if outcome != "all":
+        params["outcome"] = outcome
+    if query:
+        params["q"] = query
+    if limit != 50:
+        params["limit"] = limit
+    encoded = urlencode(params)
+    return f"/tasks/audit.md?{encoded}" if encoded else "/tasks/audit.md"
 
 
 def _task_manager_audit_event_types(records: list[dict[str, Any]]) -> list[str]:
