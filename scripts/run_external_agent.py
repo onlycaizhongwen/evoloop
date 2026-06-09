@@ -51,6 +51,19 @@ def main() -> int:
         input=prompt_text,
         capture_output=True,
     )
+    _write_wrapper_log(
+        run_dir,
+        [
+            f"runtime={args.runtime}",
+            f"role={args.role}",
+            f"task_id={args.task_id}",
+            f"prompt_file={prompt_file}",
+            f"reason_file={reason_file or ''}",
+            f"backend_command={command}",
+            f"exit_code={completed.returncode}",
+            "---",
+        ],
+    )
     stdout = _read_output_last_message(args, completed.stdout)
     if stdout:
         print(stdout, end="" if stdout.endswith("\n") else "\n")
@@ -104,32 +117,35 @@ def _read_output_last_message(args: argparse.Namespace, fallback_stdout: str) ->
 
 
 def _dry_run(args: argparse.Namespace, prompt_file: Path, run_dir: Path, reason_file: Path | None) -> int:
-    log_dir = run_dir / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
     prompt_text = prompt_file.read_text(encoding="utf-8")
     reason_text = reason_file.read_text(encoding="utf-8") if reason_file else ""
-    with (log_dir / "external_agent_wrapper.log").open("a", encoding="utf-8") as file:
-        file.write(
-            "\n".join(
-                [
-                    f"runtime={args.runtime}",
-                    f"role={args.role}",
-                    f"task_id={args.task_id}",
-                    f"prompt_file={prompt_file}",
-                    f"reason_file={reason_file or ''}",
-                    f"prompt_chars={len(prompt_text)}",
-                    f"reason_chars={len(reason_text)}",
-                    "---",
-                ]
-            )
-            + "\n"
-        )
+    _write_wrapper_log(
+        run_dir,
+        [
+            f"runtime={args.runtime}",
+            f"role={args.role}",
+            f"task_id={args.task_id}",
+            f"prompt_file={prompt_file}",
+            f"reason_file={reason_file or ''}",
+            f"prompt_chars={len(prompt_text)}",
+            f"reason_chars={len(reason_text)}",
+            "dry_run=true",
+            "---",
+        ],
+    )
 
     if args.role == "reviewer":
         print(json.dumps(_review_payload(args.task_id), ensure_ascii=False))
     else:
         print(f"{args.runtime} {args.role} dry-run completed for {args.task_id}")
     return 0
+
+
+def _write_wrapper_log(run_dir: Path, lines: list[str]) -> None:
+    log_dir = run_dir / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    with (log_dir / "external_agent_wrapper.log").open("a", encoding="utf-8") as file:
+        file.write("\n".join(lines) + "\n")
 
 
 def _review_payload(task_id: str) -> dict[str, object]:
