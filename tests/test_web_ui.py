@@ -1476,6 +1476,59 @@ def test_task_manager_batch_operations(monkeypatch, tmp_path: Path):
     assert "job-batch-failed" in job_search_page.text
 
 
+def test_task_manager_audit_can_include_archives(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+    audit_dir = tmp_path / ".omx"
+    audit_dir.mkdir()
+    archive_path = audit_dir / "web-job-audit.20260609120000000000.jsonl"
+    active_path = audit_dir / "web-job-audit.jsonl"
+    archive_path.write_text(
+        json.dumps(
+            {
+                "event_type": "batch_stop",
+                "processed_job_ids": ["job-archived"],
+                "message": "archived event",
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    active_path.write_text(
+        json.dumps(
+            {
+                "event_type": "batch_delete",
+                "processed_job_ids": ["job-active"],
+                "message": "active event",
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    client = TestClient(app)
+
+    active_page = client.get("/tasks/audit?q=job-archived")
+    assert active_page.status_code == 200
+    assert "0 / 1" in active_page.text
+    assert "archived event" not in active_page.text
+    assert "<strong>batch_stop</strong>" not in active_page.text
+
+    archive_page = client.get("/tasks/audit?scope=all&q=job-archived")
+    assert archive_page.status_code == 200
+    assert "1 / 2" in archive_page.text
+    assert "job-archived" in archive_page.text
+    assert '<option value="all" selected>Active + archives</option>' in archive_page.text
+    assert 'href="/tasks/audit.md?q=job-archived&amp;scope=all">导出 Markdown</a>' in archive_page.text
+
+    archive_export = client.get("/tasks/audit.md?scope=all&q=job-archived")
+    assert archive_export.status_code == 200
+    assert "- Filters: 范围: Active + archives; 搜索: job-archived" in archive_export.text
+    assert "job-archived" in archive_export.text
+    assert "job-active" not in archive_export.text
+
+
 def test_task_manager_maintenance_prunes_old_non_running_jobs(monkeypatch, tmp_path: Path):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "examples").mkdir()

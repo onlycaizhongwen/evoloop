@@ -59,11 +59,17 @@ class WebJobAuditLog:
             handle.write(json.dumps(event.to_record(), ensure_ascii=False, sort_keys=True))
             handle.write("\n")
 
-    def list_recent(self, limit: int = 50) -> list[dict[str, Any]]:
-        if not self.path.exists():
+    def list_recent(self, limit: int = 50, *, include_archives: bool = False) -> list[dict[str, Any]]:
+        records: list[dict[str, Any]] = []
+        for source_path in self._read_paths(include_archives=include_archives):
+            records.extend(self._read_records(source_path))
+        return records[-limit:][::-1]
+
+    def _read_records(self, source_path: Path) -> list[dict[str, Any]]:
+        if not source_path.exists():
             return []
         records: list[dict[str, Any]] = []
-        for line in self.path.read_text(encoding="utf-8").splitlines():
+        for line in source_path.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if not line:
                 continue
@@ -73,7 +79,12 @@ class WebJobAuditLog:
                 continue
             if isinstance(record, dict):
                 records.append(record)
-        return records[-limit:][::-1]
+        return records
+
+    def _read_paths(self, *, include_archives: bool) -> list[Path]:
+        if not include_archives:
+            return [self.path]
+        return [*reversed(self._archive_paths()), self.path]
 
     def _rotate_if_needed(self) -> None:
         if self.max_bytes is None or self.max_bytes <= 0:

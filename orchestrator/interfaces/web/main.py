@@ -372,13 +372,20 @@ def task_manager(
 
 
 @app.get("/tasks/audit.md")
-def task_manager_audit_markdown(event_type: str = "all", outcome: str = "all", q: str = "", limit: int = 50):
-    records, _total, _event_types, _active_event_type, _active_outcome, _query, active_filters = (
+def task_manager_audit_markdown(
+    event_type: str = "all",
+    outcome: str = "all",
+    q: str = "",
+    limit: int = 50,
+    scope: str = "active",
+):
+    records, _total, _event_types, _active_event_type, _active_outcome, _query, _active_scope, active_filters = (
         _filtered_task_manager_audit_records(
             event_type,
             outcome,
             q,
             limit,
+            scope,
         )
     )
     return PlainTextResponse(
@@ -395,6 +402,7 @@ def task_manager_audit_page(
     outcome: str = "all",
     q: str = "",
     limit: int = 50,
+    scope: str = "active",
 ):
     outcome_options = [
         {"value": "all", "label": "All"},
@@ -409,16 +417,24 @@ def task_manager_audit_page(
         active_event_type,
         active_outcome,
         query,
+        active_scope,
         active_filters,
     ) = _filtered_task_manager_audit_records(
         event_type,
         outcome,
         q,
         limit,
+        scope,
         outcome_options=outcome_options,
     )
     active_limit = _normalize_task_manager_audit_limit(limit)
-    audit_markdown_url = _task_manager_audit_markdown_url(active_event_type, active_outcome, query, active_limit)
+    audit_markdown_url = _task_manager_audit_markdown_url(
+        active_event_type,
+        active_outcome,
+        query,
+        active_limit,
+        active_scope,
+    )
     return TEMPLATES.TemplateResponse(
         request,
         "task_audit.html",
@@ -429,7 +445,12 @@ def task_manager_audit_page(
             "event_types": event_types,
             "active_event_type": active_event_type,
             "active_outcome": active_outcome,
+            "active_scope": active_scope,
             "outcome_options": outcome_options,
+            "scope_options": [
+                {"value": "active", "label": "Active file"},
+                {"value": "all", "label": "Active + archives"},
+            ],
             "active_filters": active_filters,
             "audit_markdown_url": audit_markdown_url,
             "query": query,
@@ -2392,10 +2413,15 @@ def _filtered_task_manager_audit_records(
     outcome: str,
     query: str,
     limit: int,
+    scope: str = "active",
     outcome_options: list[dict[str, str]] | None = None,
-) -> tuple[list[dict[str, Any]], int, list[str], str, str, str, list[str]]:
+) -> tuple[list[dict[str, Any]], int, list[str], str, str, str, str, list[str]]:
     active_limit = _normalize_task_manager_audit_limit(limit)
-    records = WebJobAuditLog(WEB_JOB_AUDIT_PATH).list_recent(limit=active_limit)
+    active_scope = _normalize_task_manager_audit_scope(scope)
+    records = WebJobAuditLog(WEB_JOB_AUDIT_PATH).list_recent(
+        limit=active_limit,
+        include_archives=active_scope == "all",
+    )
     event_types = _task_manager_audit_event_types(records)
     active_event_type = event_type if event_type == "all" or event_type in event_types else "all"
     active_outcome = outcome if outcome in {"all", "skipped", "failed", "clean"} else "all"
@@ -2415,11 +2441,21 @@ def _filtered_task_manager_audit_records(
         active_outcome,
         active_outcome_label,
         active_query,
+        active_scope,
     )
-    return filtered_records, len(records), event_types, active_event_type, active_outcome, active_query, active_filters
+    return (
+        filtered_records,
+        len(records),
+        event_types,
+        active_event_type,
+        active_outcome,
+        active_query,
+        active_scope,
+        active_filters,
+    )
 
 
-def _task_manager_audit_markdown_url(event_type: str, outcome: str, query: str, limit: int) -> str:
+def _task_manager_audit_markdown_url(event_type: str, outcome: str, query: str, limit: int, scope: str) -> str:
     params: dict[str, str | int] = {}
     if event_type != "all":
         params["event_type"] = event_type
@@ -2429,6 +2465,8 @@ def _task_manager_audit_markdown_url(event_type: str, outcome: str, query: str, 
         params["q"] = query
     if limit != 50:
         params["limit"] = limit
+    if scope != "active":
+        params["scope"] = scope
     encoded = urlencode(params)
     return f"/tasks/audit.md?{encoded}" if encoded else "/tasks/audit.md"
 
@@ -2441,6 +2479,10 @@ def _normalize_task_manager_audit_limit(limit: int) -> int:
     if limit in {25, 50, 100, 200}:
         return limit
     return 50
+
+
+def _normalize_task_manager_audit_scope(scope: str) -> str:
+    return scope if scope in {"active", "all"} else "active"
 
 
 def _filter_task_manager_audit_records(records: list[dict[str, Any]], event_type: str) -> list[dict[str, Any]]:
@@ -2470,8 +2512,11 @@ def _task_manager_audit_active_filters(
     outcome: str,
     outcome_label: str,
     query: str,
+    scope: str,
 ) -> list[str]:
     filters: list[str] = []
+    if scope == "all":
+        filters.append("范围: Active + archives")
     if event_type != "all":
         filters.append(f"事件类型: {event_type}")
     if outcome != "all":

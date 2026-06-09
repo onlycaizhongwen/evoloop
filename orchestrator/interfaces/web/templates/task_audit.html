@@ -49,6 +49,13 @@
               {% endfor %}
             </select>
           </label>
+          <label>Scope
+            <select name="scope">
+              {% for option in scope_options %}
+              <option value="{{ option.value }}" {% if active_scope == option.value %}selected{% endif %}>{{ option.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
           <label>搜索
             <input name="q" value="{{ query }}" placeholder="Job ID、Run ID、事件或原因">
           </label>

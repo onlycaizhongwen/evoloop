@@ -55,6 +55,27 @@ def test_web_job_audit_log_rotates_before_appending_new_event(tmp_path: Path):
     assert json.loads(archives[0].read_text(encoding="utf-8").splitlines()[0])["event_type"] == "old"
 
 
+def test_web_job_audit_log_can_list_recent_from_archives(tmp_path: Path):
+    path = tmp_path / "web-job-audit.jsonl"
+    archive = tmp_path / "web-job-audit.20260609120000000000.jsonl"
+    archive.write_text(
+        json.dumps({"event_type": "archived", "processed_job_ids": ["job-archived"]}) + "\n",
+        encoding="utf-8",
+    )
+    path.write_text(
+        json.dumps({"event_type": "active", "processed_job_ids": ["job-active"]}) + "\n",
+        encoding="utf-8",
+    )
+
+    log = WebJobAuditLog(path)
+
+    active_records = log.list_recent(limit=10)
+    all_records = log.list_recent(limit=10, include_archives=True)
+
+    assert [record["event_type"] for record in active_records] == ["active"]
+    assert [record["event_type"] for record in all_records] == ["active", "archived"]
+
+
 def test_web_job_audit_log_prunes_old_archives(tmp_path: Path):
     path = tmp_path / "web-job-audit.jsonl"
     log = WebJobAuditLog(path, max_bytes=1, archive_count=1)

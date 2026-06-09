@@ -297,6 +297,13 @@
 - 2026-05-27 Web UI Task Management Navigation：已完成。新增顶部菜单和 `/tasks` 任务管理页，支持按全部、运行中、已完成、失败筛选 persisted Web Jobs；重复模板运行会打开已有 Job 并显示说明。验证：`python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` 通过，`43 passed`。
 - 2026-05-27 Web UI Task Management Workspace：已完成。`/tasks` 改为左侧菜单工作台布局，任务列表上方提供 `新建任务` 按钮，点击后弹出表单并复用 `/tasks/run` 提交流程。验证：`python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` 通过，`44 passed`。
 - 2026-05-27 Web UI Task List Table：已完成。`/tasks` 任务列表改为真实表格，列为状态、Job ID、Run ID、模板、执行、更新时间、操作，并保留窄屏横向滚动。验证：`python -m pytest -q tests/test_task_template_registry.py tests/test_web_ui.py` 通过，`44 passed`。
+# 2026-06-09 Web Audit Archive Search
+
+- Status: completed.
+- Summary: add opt-in `scope=all` search/export for rotated Web task-manager audit archives while preserving active-only default behavior.
+- Process file: `.codex/plans/main/web-audit-archive-search/process.md`
+- Verification: focused audit tests passed with `12 passed, 54 deselected`; Web/audit-log tests passed with `66 passed`; full `python -m pytest -q` passed with `154 passed`.
+
 # 2026-06-09 External Agent Closed Loop Smoke
 
 - Status: completed.
