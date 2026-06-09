@@ -4,6 +4,7 @@ import json
 import logging
 import re
 import shlex
+import shutil
 import sqlite3
 import threading
 from dataclasses import dataclass, field
@@ -54,6 +55,7 @@ WEB_TASKS_DIR = Path(".omx/web-tasks")
 WEB_JOB_AUDIT_PATH = Path(".omx/web-job-audit.jsonl")
 MAINTENANCE_PRUNE_STATUSES = ["done", "failed", "stopped"]
 MAINTENANCE_PRUNE_AGE_OPTIONS = [7, 30, 90]
+MAINTENANCE_RUN_PRUNE_AGE_OPTIONS = [7, 30, 90]
 WEB_DIR = Path(__file__).parent
 DEFAULT_SMOKE_WORKTREE = Path(".tmp/omx-unified-diff-smoke")
 TEMPLATES = Jinja2Templates(directory=str(WEB_DIR / "templates"))
@@ -561,6 +563,52 @@ def prune_tasks(
                 "cutoff": summary.get("cutoff") or "",
                 "statuses": MAINTENANCE_PRUNE_STATUSES,
                 "preserved_run_dirs": True,
+                "reasons": summary.get("reasons") or {},
+            },
+        )
+    )
+    notice = (
+        f"{summary['label']}：成功 {summary['processed']} 个，"
+        f"跳过 {summary['skipped']} 个，失败 {summary['failed']} 个。"
+    )
+    return _redirect_to_tasks_with_batch_notice(
+        notice,
+        status=status,
+        quality=quality,
+        rerun=rerun,
+        page=page,
+        page_size=page_size,
+        q=q,
+    )
+
+
+@app.post("/tasks/maintenance/prune-runs")
+def prune_run_artifacts(
+    older_than_days: Annotated[int, Form()] = 30,
+    status: Annotated[str, Form()] = "all",
+    quality: Annotated[str, Form()] = "all",
+    rerun: Annotated[str, Form()] = "all",
+    page: Annotated[int, Form()] = 1,
+    page_size: Annotated[int, Form()] = 10,
+    q: Annotated[str, Form()] = "",
+):
+    age_days = _normalize_maintenance_run_prune_age(older_than_days)
+    summary = _prune_old_run_artifacts(age_days)
+    _append_web_job_audit(
+        WebJobAuditEvent(
+            event_type="maintenance_prune_runs",
+            request_context=_task_request_context(status=status, quality=quality, rerun=rerun, page=page, page_size=page_size, q=q),
+            selected_job_ids=list(summary.get("selected_job_ids") or []),
+            processed_job_ids=list(summary.get("processed_job_ids") or []),
+            skipped_job_ids=list(summary.get("skipped_job_ids") or []),
+            failed_job_ids=list(summary.get("failed_job_ids") or []),
+            run_ids=list(summary.get("run_ids") or []),
+            message=str(summary.get("label") or ""),
+            details={
+                "older_than_days": age_days,
+                "cutoff": summary.get("cutoff") or "",
+                "deleted_run_dirs": list(summary.get("deleted_run_dirs") or []),
+                "candidate_run_dirs": list(summary.get("candidate_run_dirs") or []),
                 "reasons": summary.get("reasons") or {},
             },
         )
@@ -1348,6 +1396,10 @@ def _normalize_maintenance_prune_age(value: int) -> int:
     return value if value in MAINTENANCE_PRUNE_AGE_OPTIONS else 30
 
 
+def _normalize_maintenance_run_prune_age(value: int) -> int:
+    return value if value in MAINTENANCE_RUN_PRUNE_AGE_OPTIONS else 30
+
+
 def _prune_old_web_jobs(older_than_days: int) -> dict[str, Any]:
     cutoff = (datetime.now() - timedelta(days=older_than_days)).isoformat()
     candidates = _job_repository().list_before(
@@ -1373,6 +1425,58 @@ def _prune_old_web_jobs(older_than_days: int) -> dict[str, Any]:
         except Exception:
             _record_batch_failed(summary, job_id, "exception")
     return summary
+
+
+def _prune_old_run_artifacts(older_than_days: int) -> dict[str, Any]:
+    cutoff_dt = datetime.now() - timedelta(days=older_than_days)
+    summary = _empty_batch_summary(f"维护清理 {older_than_days} 天前运行产物")
+    summary["cutoff"] = cutoff_dt.isoformat()
+    summary["candidate_run_dirs"] = []
+    summary["deleted_run_dirs"] = []
+    summary["selected_job_ids"] = []
+    summary["run_ids"] = []
+    if not RUNS_DIR.exists():
+        return summary
+
+    run_dirs = [path for path in RUNS_DIR.iterdir() if path.is_dir()]
+    run_ids = [path.name for path in run_dirs]
+    jobs_by_run_id = _jobs_by_run_id(run_ids)
+    for run_dir in sorted(run_dirs, key=lambda path: path.name):
+        run_id = run_dir.name
+        run_dir_display = str(run_dir.resolve())
+        summary["candidate_run_dirs"].append(run_dir_display)
+        summary["run_ids"].append(run_id)
+        linked_jobs = jobs_by_run_id.get(run_id, [])
+        linked_job_ids = [str(job.get("job_id") or "") for job in linked_jobs if job.get("job_id")]
+        summary["selected_job_ids"].extend(linked_job_ids)
+        if any(str(job.get("status") or "") == "running" for job in linked_jobs):
+            _record_batch_skipped(summary, run_id, "linked running job")
+            continue
+        if not (run_dir / "run_state.json").exists():
+            _record_batch_skipped(summary, run_id, "missing run_state.json")
+            continue
+        try:
+            updated_at = datetime.fromtimestamp(run_dir.stat().st_mtime)
+        except OSError:
+            _record_batch_failed(summary, run_id, "stat failed")
+            continue
+        if updated_at >= cutoff_dt:
+            _record_batch_skipped(summary, run_id, "run artifact is newer than cutoff")
+            continue
+        try:
+            shutil.rmtree(run_dir)
+            _record_batch_processed(summary, run_id, {"run_id": run_id})
+            summary["deleted_run_dirs"].append(run_dir_display)
+        except OSError:
+            _record_batch_failed(summary, run_id, "delete failed")
+    return summary
+
+
+def _jobs_by_run_id(run_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {run_id: [] for run_id in run_ids}
+    for job in _job_repository().list_by_run_ids(run_ids):
+        grouped.setdefault(str(job.get("run_id") or ""), []).append(job)
+    return grouped
 
 
 def _task_manager_job_matches(job: dict[str, str], needle: str) -> bool:

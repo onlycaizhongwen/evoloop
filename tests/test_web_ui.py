@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import subprocess
 import sqlite3
 import sys
@@ -1617,6 +1618,85 @@ def test_task_manager_maintenance_prunes_old_non_running_jobs(monkeypatch, tmp_p
     assert audit_page.status_code == 200
     assert "maintenance_prune" in audit_page.text
     assert "job-maintenance-old-done" in audit_page.text
+
+
+def test_task_manager_maintenance_prunes_old_run_artifacts_safely(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "examples").mkdir()
+    runs_dir = tmp_path / ".omx" / "runs"
+    old_orphan_run = runs_dir / "run-maintenance-old-orphan"
+    old_done_run = runs_dir / "run-maintenance-old-done-artifact"
+    old_running_run = runs_dir / "run-maintenance-old-running-artifact"
+    fresh_run = runs_dir / "run-maintenance-fresh-artifact"
+    missing_state_run = runs_dir / "run-maintenance-missing-state"
+    for run_dir in [old_orphan_run, old_done_run, old_running_run, fresh_run, missing_state_run]:
+        run_dir.mkdir(parents=True)
+    for run_dir in [old_orphan_run, old_done_run, old_running_run, fresh_run]:
+        (run_dir / "run_state.json").write_text("{}", encoding="utf-8")
+    old_epoch = time.time() - (40 * 24 * 60 * 60)
+    for run_dir in [old_orphan_run, old_done_run, old_running_run, missing_state_run]:
+        os.utime(run_dir, (old_epoch, old_epoch))
+    repository = SQLiteJobRepository(tmp_path / ".omx" / "orchestrator.db")
+    repository.create(
+        {
+            "job_id": "job-maintenance-done-artifact",
+            "status": "done",
+            "message": "done",
+            "task_path": "",
+            "run_id": "run-maintenance-old-done-artifact",
+        }
+    )
+    repository.create(
+        {
+            "job_id": "job-maintenance-running-artifact",
+            "status": "running",
+            "message": "running",
+            "task_path": "",
+            "run_id": "run-maintenance-old-running-artifact",
+        }
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/tasks/maintenance/prune-runs",
+        data={
+            "older_than_days": "30",
+            "status": "all",
+            "quality": "all",
+            "rerun": "all",
+            "page": "1",
+            "page_size": "10",
+            "q": "",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    detail = client.get(response.headers["location"])
+    assert detail.status_code == 200
+    assert "维护清理 30 天前运行产物：成功 2 个，跳过 3 个，失败 0 个。" in detail.text
+    assert not old_orphan_run.exists()
+    assert not old_done_run.exists()
+    assert old_running_run.exists()
+    assert fresh_run.exists()
+    assert missing_state_run.exists()
+    assert repository.get("job-maintenance-done-artifact") is not None
+    audit_event = json.loads((tmp_path / ".omx" / "web-job-audit.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+    assert audit_event["event_type"] == "maintenance_prune_runs"
+    assert audit_event["processed_job_ids"] == [
+        "run-maintenance-old-done-artifact",
+        "run-maintenance-old-orphan",
+    ]
+    assert "run-maintenance-old-running-artifact" in audit_event["skipped_job_ids"]
+    assert "run-maintenance-missing-state" in audit_event["skipped_job_ids"]
+    assert audit_event["selected_job_ids"] == ["job-maintenance-done-artifact", "job-maintenance-running-artifact"]
+    assert set(audit_event["details"]["deleted_run_dirs"]) == {str(old_orphan_run), str(old_done_run)}
+    assert audit_event["details"]["reasons"]["run-maintenance-old-running-artifact"] == "linked running job"
+
+    audit_page = client.get("/tasks/audit?event_type=maintenance_prune_runs")
+    assert audit_page.status_code == 200
+    assert "maintenance_prune_runs" in audit_page.text
+    assert "run-maintenance-old-orphan" in audit_page.text
 
 
 def test_task_manager_url_preserves_query():

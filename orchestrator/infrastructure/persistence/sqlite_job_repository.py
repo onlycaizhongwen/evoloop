@@ -105,6 +105,20 @@ class SQLiteJobRepository:
             rows = connection.execute(query, params).fetchall()
         return [dict(row) for row in rows]
 
+    def list_by_run_ids(self, run_ids: list[str]) -> list[dict[str, Any]]:
+        if not run_ids:
+            return []
+        placeholders = ", ".join("?" for _ in run_ids)
+        query = f"""
+            SELECT job_id, status, message, task_path, run_id, started_at, finished_at, updated_at
+            FROM web_jobs
+            WHERE run_id IN ({placeholders})
+            ORDER BY updated_at DESC
+        """
+        with self._connect() as connection:
+            rows = connection.execute(query, run_ids).fetchall()
+        return [dict(row) for row in rows]
+
     def count(self, status: str | None = None) -> int:
         query = "SELECT COUNT(*) FROM web_jobs"
         params: list[Any] = []

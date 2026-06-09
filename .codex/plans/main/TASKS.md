@@ -1,3 +1,10 @@
+# 2026-06-09 Web Run Artifact Cleanup
+
+- Status: completed.
+- Summary: `/tasks` is gaining an explicit maintenance action to prune old `.omx/runs/{run_id}` artifact directories while preserving Web Job records and audit logs. The action skips running-linked and missing-state run directories and writes `maintenance_prune_runs` audit evidence.
+- Process file: `.codex/plans/main/web-run-artifact-cleanup/process.md`
+- Resume hint: read the process file for verification evidence; remaining operational step is commit/push if not already done.
+
 # 2026-05-26 Web UI Task Template Preview HTML
 
 - 状态：已完成
