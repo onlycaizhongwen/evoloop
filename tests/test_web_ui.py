@@ -1863,6 +1863,8 @@ def test_task_manager_health_reports_healthy_baseline(monkeypatch, tmp_path: Pat
     )
     audit_path = tmp_path / ".omx" / "web-job-audit.jsonl"
     audit_path.write_text(json.dumps({"event_type": "batch_delete"}, ensure_ascii=False) + "\n", encoding="utf-8")
+    (tmp_path / ".omx" / "runs" / "run-health").mkdir(parents=True)
+    (tmp_path / ".omx" / "runs" / "run-health" / "run_state.json").write_text("{}", encoding="utf-8")
 
     response = TestClient(app).get("/tasks/health")
 
@@ -1872,6 +1874,8 @@ def test_task_manager_health_reports_healthy_baseline(monkeypatch, tmp_path: Pat
     assert "Database opens read-only." in response.text
     assert "Task audit log" in response.text
     assert "Audit log is readable." in response.text
+    assert "Task audit archives" in response.text
+    assert "Run artifact footprint" in response.text
     assert "Template examples" in response.text
     assert "Docker command presets" in response.text
     assert "team_patch_backend" in response.text
@@ -1894,6 +1898,11 @@ def test_task_manager_health_json_reports_machine_readable_summary(monkeypatch, 
     )
     audit_path = tmp_path / ".omx" / "web-job-audit.jsonl"
     audit_path.write_text(json.dumps({"event_type": "batch_delete"}, ensure_ascii=False) + "\n", encoding="utf-8")
+    archive_path = tmp_path / ".omx" / "web-job-audit.20260609143000000000.jsonl"
+    archive_path.write_text(json.dumps({"event_type": "batch_stop"}, ensure_ascii=False) + "\n", encoding="utf-8")
+    run_dir = tmp_path / ".omx" / "runs" / "run-health-json"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run_state.json").write_text("{}", encoding="utf-8")
 
     response = TestClient(app).get("/tasks/health.json")
 
@@ -1904,9 +1913,17 @@ def test_task_manager_health_json_reports_machine_readable_summary(monkeypatch, 
     assert {check["name"] for check in payload["checks"]} >= {
         "SQLite job database",
         "Task audit log",
+        "Task audit archives",
+        "Run artifact footprint",
         "Template examples",
         "Docker command presets",
     }
+    archive_check = next(check for check in payload["checks"] if check["name"] == "Task audit archives")
+    assert archive_check["status"] == "pass"
+    assert "1 archives" in archive_check["detail"]
+    run_artifact_check = next(check for check in payload["checks"] if check["name"] == "Run artifact footprint")
+    assert run_artifact_check["status"] == "pass"
+    assert "1 run dirs" in run_artifact_check["detail"]
     docker_check = next(check for check in payload["checks"] if check["name"] == "Docker command presets")
     assert docker_check["status"] == "pass"
     assert "team_patch_backend" in docker_check["detail"]
@@ -1923,6 +1940,7 @@ def test_task_manager_health_warns_when_audit_log_missing_without_mutation(monke
     assert response.status_code == 200
     assert "Audit log does not exist yet." in response.text
     assert "No Web Job database found yet." in response.text
+    assert "No run artifacts directory found." in response.text
     assert before_paths == after_paths
     assert not (tmp_path / ".omx").exists()
 

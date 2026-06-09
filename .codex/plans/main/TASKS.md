@@ -1,3 +1,10 @@
+# 2026-06-09 Web Health Footprint Evidence
+
+- Status: completed.
+- Summary: `/tasks/health` is gaining read-only footprint evidence for rotated task audit archives and `.omx/runs` artifacts so operators can judge cleanup pressure before using maintenance actions.
+- Process file: `.codex/plans/main/web-health-footprint-evidence/process.md`
+- Resume hint: read the process file for verification evidence; remaining operational step is commit/push if not already done.
+
 # 2026-06-09 Web Run Artifact Cleanup
 
 - Status: completed.

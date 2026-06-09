@@ -430,3 +430,10 @@
 - Summary: `/tasks` now has a separate run artifact cleanup action for old `.omx/runs/{run_id}` directories. It preserves Web Job records and audit logs, skips artifacts linked to running jobs, skips directories missing `run_state.json`, and records `maintenance_prune_runs` audit evidence.
 - Artifacts: `orchestrator/infrastructure/persistence/sqlite_job_repository.py`, `orchestrator/interfaces/web/main.py`, `orchestrator/interfaces/web/templates/tasks.html`, `tests/test_web_ui.py`, `docs/codex/v1/plans/web-run-artifact-cleanup.md`, `docs/codex/v1/trace/web-run-artifact-cleanup-trace.md`, `.codex/plans/main/web-run-artifact-cleanup/process.md`.
 - Verification: `python -m py_compile orchestrator/interfaces/web/main.py orchestrator/infrastructure/persistence/sqlite_job_repository.py` passed; `python -m pytest -q tests/test_web_ui.py -k "maintenance"` passed with `2 passed, 59 deselected`; `python -m pytest -q tests/test_web_ui.py` passed with `61 passed`; `python -m pytest -q` passed with `155 passed`; `git diff --check` passed with only Windows CRLF warnings.
+
+# 2026-06-09 Web Health Footprint Evidence
+
+- Status: completed.
+- Summary: `/tasks/health` now reports read-only footprint evidence for rotated task audit archives and `.omx/runs` artifacts, helping operators decide whether maintenance cleanup is needed without mutating the workspace.
+- Artifacts: `orchestrator/interfaces/web/main.py`, `tests/test_web_ui.py`, `docs/codex/v1/plans/web-health-footprint-evidence.md`, `docs/codex/v1/trace/web-health-footprint-evidence-trace.md`, `.codex/plans/main/web-health-footprint-evidence/process.md`.
+- Verification: `python -m py_compile orchestrator/interfaces/web/main.py` passed; `python -m pytest -q tests/test_web_ui.py -k "health"` passed with `5 passed, 56 deselected`; `python -m pytest -q tests/test_demo_readiness_smoke.py tests/test_web_browser_smoke.py` passed with `2 passed`; `python -m pytest -q tests/test_web_ui.py` passed with `61 passed`; `python -m pytest -q` passed with `155 passed`; `git diff --check` passed with only Windows CRLF warnings.

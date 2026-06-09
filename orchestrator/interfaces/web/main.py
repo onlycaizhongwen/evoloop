@@ -2351,6 +2351,8 @@ def _build_demo_readiness_checks() -> list[dict[str, str]]:
     return [
         _check_sqlite_job_db_readable(),
         _check_task_audit_log_readable(),
+        _check_task_audit_archive_footprint(),
+        _check_run_artifact_footprint(),
         _check_template_examples_exist(),
         _check_web_static_assets_exist(),
         _check_web_templates_exist(),
@@ -2409,6 +2411,62 @@ def _check_task_audit_log_readable() -> dict[str, str]:
     if corrupt:
         return _readiness_check("Task audit log", "warn", "Audit log is readable with corrupt lines ignored.", f"{records} records, {corrupt} corrupt lines")
     return _readiness_check("Task audit log", "pass", "Audit log is readable.", f"{records} records")
+
+
+def _check_task_audit_archive_footprint() -> dict[str, str]:
+    audit_dir = WEB_JOB_AUDIT_PATH.parent
+    if not audit_dir.exists():
+        return _readiness_check("Task audit archives", "warn", "Audit directory does not exist yet.", str(audit_dir))
+    archive_paths = sorted(audit_dir.glob(f"{WEB_JOB_AUDIT_PATH.stem}.*{WEB_JOB_AUDIT_PATH.suffix}"))
+    try:
+        total_bytes = sum(path.stat().st_size for path in archive_paths if path.is_file())
+    except OSError as exc:
+        return _readiness_check("Task audit archives", "warn", "Audit archives could not be fully inspected.", str(exc))
+    if not archive_paths:
+        return _readiness_check("Task audit archives", "pass", "No rotated audit archives found.", "0 archives, 0 B")
+    return _readiness_check(
+        "Task audit archives",
+        "pass",
+        "Rotated audit archives are inspectable.",
+        f"{len(archive_paths)} archives, {_format_bytes(total_bytes)}",
+    )
+
+
+def _check_run_artifact_footprint() -> dict[str, str]:
+    if not RUNS_DIR.exists():
+        return _readiness_check("Run artifact footprint", "pass", "No run artifacts directory found.", f"0 run dirs, {str(RUNS_DIR)}")
+    try:
+        run_dirs = [path for path in RUNS_DIR.iterdir() if path.is_dir()]
+        total_bytes = sum(_directory_size(path) for path in run_dirs)
+    except OSError as exc:
+        return _readiness_check("Run artifact footprint", "warn", "Run artifacts could not be fully inspected.", str(exc))
+    if not run_dirs:
+        return _readiness_check("Run artifact footprint", "pass", "Run artifacts directory is empty.", f"0 run dirs, {str(RUNS_DIR)}")
+    return _readiness_check(
+        "Run artifact footprint",
+        "pass",
+        "Run artifacts are inspectable.",
+        f"{len(run_dirs)} run dirs, {_format_bytes(total_bytes)}",
+    )
+
+
+def _directory_size(path: Path) -> int:
+    total = 0
+    for child in path.rglob("*"):
+        if child.is_file():
+            total += child.stat().st_size
+    return total
+
+
+def _format_bytes(size: int) -> str:
+    units = ["B", "KB", "MB", "GB"]
+    value = float(max(0, size))
+    for unit in units:
+        if value < 1024 or unit == units[-1]:
+            if unit == "B":
+                return f"{int(value)} {unit}"
+            return f"{value:.1f} {unit}"
+        value /= 1024
 
 
 def _check_template_examples_exist() -> dict[str, str]:
