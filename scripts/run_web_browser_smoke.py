@@ -15,6 +15,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 ROOT = Path(__file__).resolve().parents[1]
 SMOKE_DIR = ROOT / ".tmp" / "web-browser-smoke"
+ARCHIVE_AUDIT_NAME = "web-job-audit.20260609120000000000.jsonl"
 TIMEOUT_SECONDS = 90
 
 
@@ -40,6 +41,29 @@ def main() -> int:
         if health_payload["summary"]["overall"] != "pass":
             print(json.dumps(health_payload, ensure_ascii=False, indent=2))
             return 1
+        assert_page_contains(
+            base_url + "/tasks/audit?scope=all&q=job-archived-smoke",
+            [
+                "1 / 2",
+                "job-archived-smoke",
+                f"source: archive / {ARCHIVE_AUDIT_NAME}",
+                "All sources (2)",
+                "Archives only (1)",
+            ],
+        )
+        assert_page_contains(
+            base_url + "/tasks/audit?source=archive",
+            ["1 / 2", "job-archived-smoke", "Archives only (1)"],
+        )
+        assert_page_contains(
+            base_url + "/tasks/audit?" + urlencode({"source_file": ARCHIVE_AUDIT_NAME}),
+            ["1 / 2", f"source: archive / {ARCHIVE_AUDIT_NAME}", f"{ARCHIVE_AUDIT_NAME} (1)"],
+        )
+        assert_page_contains(
+            base_url + "/tasks/audit.md?source=archive",
+            [f"- Source files: {ARCHIVE_AUDIT_NAME} (1)", f"- Source: archive ({ARCHIVE_AUDIT_NAME})"],
+        )
+        print("audit_archive_smoke=passed")
 
         job_path = post_form(base_url + "/templates/run", {"template_id": "mock_demo"})
         print(f"job_path={job_path}")
@@ -69,7 +93,29 @@ def reset_smoke_workspace() -> None:
     (examples_dir / "task.mock.json").write_text("{}", encoding="utf-8")
     audit_path = SMOKE_DIR / ".omx" / "web-job-audit.jsonl"
     audit_path.parent.mkdir()
-    audit_path.write_text(json.dumps({"event_type": "web_browser_smoke_seed"}) + "\n", encoding="utf-8")
+    audit_path.write_text(
+        json.dumps(
+            {
+                "event_type": "web_browser_smoke_seed",
+                "processed_job_ids": ["job-active-smoke"],
+                "message": "active smoke audit event",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    archive_path = audit_path.parent / ARCHIVE_AUDIT_NAME
+    archive_path.write_text(
+        json.dumps(
+            {
+                "event_type": "web_browser_smoke_archive_seed",
+                "processed_job_ids": ["job-archived-smoke"],
+                "message": "archived smoke audit event",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def find_free_port() -> int:

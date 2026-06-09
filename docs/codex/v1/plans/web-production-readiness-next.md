@@ -11,6 +11,8 @@ Add a script-level smoke that starts a real Uvicorn process in an isolated works
 - `/`
 - `/tasks`
 - `/tasks/health.json`
+- `/tasks/audit`
+- `/tasks/audit.md`
 - `/templates/run`
 - `/jobs/{job_id}`
 - `/runs/{run_id}`
@@ -22,6 +24,7 @@ The first increment intentionally uses only the Python standard library plus the
 - The smoke starts the Web app as a real server process, not only through `TestClient`.
 - The smoke uses an isolated `.tmp/web-browser-smoke` workspace and does not mutate project task history.
 - The smoke verifies health JSON, task manager controls, template-run redirect, job completion, run detail rendering, and task-list visibility.
+- The smoke verifies archived audit source provenance and source/source-file filtering over real HTTP requests.
 - A pytest wrapper covers the script.
 
 ## Follow-Up Candidates

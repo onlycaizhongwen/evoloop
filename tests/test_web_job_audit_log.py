@@ -36,7 +36,10 @@ def test_web_job_audit_log_ignores_corrupt_lines(tmp_path: Path):
 
     records = WebJobAuditLog(path).list_recent()
 
-    assert records == [{"event_type": "valid", "processed_job_ids": ["job-valid"]}]
+    assert len(records) == 1
+    assert records[0]["event_type"] == "valid"
+    assert records[0]["processed_job_ids"] == ["job-valid"]
+    assert records[0]["_source_kind"] == "active"
 
 
 def test_web_job_audit_log_rotates_before_appending_new_event(tmp_path: Path):
@@ -74,6 +77,11 @@ def test_web_job_audit_log_can_list_recent_from_archives(tmp_path: Path):
 
     assert [record["event_type"] for record in active_records] == ["active"]
     assert [record["event_type"] for record in all_records] == ["active", "archived"]
+    assert active_records[0]["_source_kind"] == "active"
+    assert active_records[0]["_source_file"] == "web-job-audit.jsonl"
+    archived_record = next(record for record in all_records if record["event_type"] == "archived")
+    assert archived_record["_source_kind"] == "archive"
+    assert archived_record["_source_file"] == archive.name
 
 
 def test_web_job_audit_log_prunes_old_archives(tmp_path: Path):

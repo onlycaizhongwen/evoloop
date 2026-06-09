@@ -1,3 +1,10 @@
+# 2026-06-09 Web Audit Source Provenance
+
+- Status: completed.
+- Summary: `/tasks/audit` and `/tasks/audit.md` are gaining source provenance for active vs archived audit records, using read-time metadata without rewriting JSONL audit files.
+- Process file: `.codex/plans/main/web-audit-source-provenance/process.md`
+- Resume hint: read the process file for verification evidence. Do not commit unless requested.
+
 # 2026-06-09 Web Health Footprint Evidence
 
 - Status: completed.

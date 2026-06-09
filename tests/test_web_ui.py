@@ -1520,14 +1520,50 @@ def test_task_manager_audit_can_include_archives(monkeypatch, tmp_path: Path):
     assert archive_page.status_code == 200
     assert "1 / 2" in archive_page.text
     assert "job-archived" in archive_page.text
+    assert f"source: archive / {archive_path.name}" in archive_page.text
     assert '<option value="all" selected>Active + archives</option>' in archive_page.text
+    assert '<option value="all" selected>All sources (2)</option>' in archive_page.text
+    assert '<option value="active" >Active only (1)</option>' in archive_page.text
+    assert '<option value="archive" >Archives only (1)</option>' in archive_page.text
     assert 'href="/tasks/audit.md?q=job-archived&amp;scope=all">导出 Markdown</a>' in archive_page.text
 
     archive_export = client.get("/tasks/audit.md?scope=all&q=job-archived")
     assert archive_export.status_code == 200
     assert "- Filters: 范围: Active + archives; 搜索: job-archived" in archive_export.text
+    assert f"- Source files: {archive_path.name} (1)" in archive_export.text
+    assert f"- Source: archive ({archive_path.name})" in archive_export.text
     assert "job-archived" in archive_export.text
     assert "job-active" not in archive_export.text
+
+    archive_only_page = client.get("/tasks/audit?source=archive")
+    assert archive_only_page.status_code == 200
+    assert "1 / 2" in archive_only_page.text
+    assert '<option value="archive" selected>Archives only (1)</option>' in archive_only_page.text
+    assert 'href="/tasks/audit.md?scope=all&amp;source=archive">导出 Markdown</a>' in archive_only_page.text
+    assert "job-archived" in archive_only_page.text
+    assert "job-active" not in archive_only_page.text
+
+    archive_only_export = client.get("/tasks/audit.md?source=archive")
+    assert archive_only_export.status_code == 200
+    assert "- Filters: 范围: Active + archives; Source: archive" in archive_only_export.text
+    assert "job-archived" in archive_only_export.text
+    assert "job-active" not in archive_only_export.text
+
+    source_file_page = client.get(f"/tasks/audit?source_file={archive_path.name}")
+    assert source_file_page.status_code == 200
+    assert "1 / 2" in source_file_page.text
+    assert f'<option value="{archive_path.name}" selected>{archive_path.name} (1)</option>' in source_file_page.text
+    assert f"source: archive / {archive_path.name}" in source_file_page.text
+    assert "job-archived" in source_file_page.text
+    assert "job-active" not in source_file_page.text
+    assert f"source_file={archive_path.name}" in source_file_page.text
+
+    source_file_export = client.get(f"/tasks/audit.md?source_file={archive_path.name}")
+    assert source_file_export.status_code == 200
+    assert f"Source file: {archive_path.name}" in source_file_export.text
+    assert f"- Source files: {archive_path.name} (1)" in source_file_export.text
+    assert "job-archived" in source_file_export.text
+    assert "job-active" not in source_file_export.text
 
 
 def test_task_manager_maintenance_prunes_old_non_running_jobs(monkeypatch, tmp_path: Path):

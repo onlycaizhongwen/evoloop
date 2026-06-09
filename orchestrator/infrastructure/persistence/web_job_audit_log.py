@@ -78,6 +78,9 @@ class WebJobAuditLog:
             except json.JSONDecodeError:
                 continue
             if isinstance(record, dict):
+                record.setdefault("_source_file", source_path.name)
+                record.setdefault("_source_path", str(source_path))
+                record.setdefault("_source_kind", "active" if source_path == self.path else "archive")
                 records.append(record)
         return records
 

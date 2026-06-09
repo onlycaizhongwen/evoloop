@@ -380,14 +380,18 @@ def task_manager_audit_markdown(
     q: str = "",
     limit: int = 50,
     scope: str = "active",
+    source: str = "all",
+    source_file: str = "all",
 ):
-    records, _total, _event_types, _active_event_type, _active_outcome, _query, _active_scope, active_filters = (
+    records, _total, _event_types, _source_file_options, _source_options, _active_event_type, _active_outcome, _query, _active_scope, _active_source, _active_source_file, active_filters = (
         _filtered_task_manager_audit_records(
             event_type,
             outcome,
             q,
             limit,
             scope,
+            source,
+            source_file,
         )
     )
     return PlainTextResponse(
@@ -405,6 +409,8 @@ def task_manager_audit_page(
     q: str = "",
     limit: int = 50,
     scope: str = "active",
+    source: str = "all",
+    source_file: str = "all",
 ):
     outcome_options = [
         {"value": "all", "label": "All"},
@@ -416,10 +422,14 @@ def task_manager_audit_page(
         filtered_records,
         total,
         event_types,
+        source_file_options,
+        source_options,
         active_event_type,
         active_outcome,
         query,
         active_scope,
+        active_source,
+        active_source_file,
         active_filters,
     ) = _filtered_task_manager_audit_records(
         event_type,
@@ -427,6 +437,8 @@ def task_manager_audit_page(
         q,
         limit,
         scope,
+        source,
+        source_file,
         outcome_options=outcome_options,
     )
     active_limit = _normalize_task_manager_audit_limit(limit)
@@ -436,6 +448,8 @@ def task_manager_audit_page(
         query,
         active_limit,
         active_scope,
+        active_source,
+        active_source_file,
     )
     return TEMPLATES.TemplateResponse(
         request,
@@ -445,14 +459,18 @@ def task_manager_audit_page(
             "total": total,
             "filtered_total": len(filtered_records),
             "event_types": event_types,
+            "source_file_options": source_file_options,
             "active_event_type": active_event_type,
             "active_outcome": active_outcome,
             "active_scope": active_scope,
+            "active_source": active_source,
+            "active_source_file": active_source_file,
             "outcome_options": outcome_options,
             "scope_options": [
                 {"value": "active", "label": "Active file"},
                 {"value": "all", "label": "Active + archives"},
             ],
+            "source_options": source_options,
             "active_filters": active_filters,
             "audit_markdown_url": audit_markdown_url,
             "query": query,
@@ -2532,6 +2550,7 @@ def _build_task_manager_audit_markdown(records: list[dict[str, Any]], active_fil
     processed_total = sum(len(list(record.get("processed_job_ids") or [])) for record in records)
     skipped_total = sum(len(list(record.get("skipped_job_ids") or [])) for record in records)
     failed_total = sum(len(list(record.get("failed_job_ids") or [])) for record in records)
+    source_file_summary = _task_manager_audit_source_file_summary(records)
     lines = [
         "# Task Manager Audit",
         "",
@@ -2540,6 +2559,7 @@ def _build_task_manager_audit_markdown(records: list[dict[str, Any]], active_fil
         f"- Processed jobs: {processed_total}",
         f"- Skipped jobs: {skipped_total}",
         f"- Failed jobs: {failed_total}",
+        f"- Source files: {source_file_summary}",
         "",
     ]
     if not records:
@@ -2554,11 +2574,14 @@ def _build_task_manager_audit_markdown(records: list[dict[str, Any]], active_fil
         failed = list(record.get("failed_job_ids") or [])
         run_ids = list(record.get("run_ids") or [])
         message = str(record.get("message") or "")
+        source_kind = str(record.get("_source_kind") or "active")
+        source_file = str(record.get("_source_file") or "")
         lines.extend(
             [
                 f"## {created_at} {event_type}",
                 "",
                 f"- Message: {message}",
+                f"- Source: {source_kind} ({source_file or '-'})",
                 f"- Selected: {len(selected)} ({', '.join(selected) if selected else '-'})",
                 f"- Processed: {len(processed)} ({', '.join(processed) if processed else '-'})",
                 f"- Skipped: {len(skipped)} ({', '.join(skipped) if skipped else '-'})",
@@ -2576,15 +2599,23 @@ def _filtered_task_manager_audit_records(
     query: str,
     limit: int,
     scope: str = "active",
+    source: str = "all",
+    source_file: str = "all",
     outcome_options: list[dict[str, str]] | None = None,
-) -> tuple[list[dict[str, Any]], int, list[str], str, str, str, str, list[str]]:
+) -> tuple[list[dict[str, Any]], int, list[str], list[dict[str, str]], list[dict[str, str]], str, str, str, str, str, str, list[str]]:
     active_limit = _normalize_task_manager_audit_limit(limit)
-    active_scope = _normalize_task_manager_audit_scope(scope)
+    active_source = _normalize_task_manager_audit_source(source)
+    requested_source_file = source_file.strip()
+    active_scope = "all" if active_source == "archive" or requested_source_file != "all" else _normalize_task_manager_audit_scope(scope)
     records = WebJobAuditLog(WEB_JOB_AUDIT_PATH).list_recent(
         limit=active_limit,
         include_archives=active_scope == "all",
     )
     event_types = _task_manager_audit_event_types(records)
+    source_file_options = _task_manager_audit_source_file_options(records)
+    source_options = _task_manager_audit_source_options(records)
+    source_files = {option["value"] for option in source_file_options}
+    active_source_file = requested_source_file if requested_source_file == "all" or requested_source_file in source_files else "all"
     active_event_type = event_type if event_type == "all" or event_type in event_types else "all"
     active_outcome = outcome if outcome in {"all", "skipped", "failed", "clean"} else "all"
     options = outcome_options or [
@@ -2595,6 +2626,8 @@ def _filtered_task_manager_audit_records(
     ]
     active_outcome_label = next(option["label"] for option in options if option["value"] == active_outcome)
     filtered_records = _filter_task_manager_audit_records(records, active_event_type)
+    filtered_records = _filter_task_manager_audit_records_by_source(filtered_records, active_source)
+    filtered_records = _filter_task_manager_audit_records_by_source_file(filtered_records, active_source_file)
     filtered_records = _filter_task_manager_audit_records_by_outcome(filtered_records, active_outcome)
     active_query = query.strip()
     filtered_records = _search_task_manager_audit_records(filtered_records, active_query)
@@ -2604,20 +2637,34 @@ def _filtered_task_manager_audit_records(
         active_outcome_label,
         active_query,
         active_scope,
+        active_source,
+        active_source_file,
     )
     return (
         filtered_records,
         len(records),
         event_types,
+        source_file_options,
+        source_options,
         active_event_type,
         active_outcome,
         active_query,
         active_scope,
+        active_source,
+        active_source_file,
         active_filters,
     )
 
 
-def _task_manager_audit_markdown_url(event_type: str, outcome: str, query: str, limit: int, scope: str) -> str:
+def _task_manager_audit_markdown_url(
+    event_type: str,
+    outcome: str,
+    query: str,
+    limit: int,
+    scope: str,
+    source: str,
+    source_file: str,
+) -> str:
     params: dict[str, str | int] = {}
     if event_type != "all":
         params["event_type"] = event_type
@@ -2629,12 +2676,46 @@ def _task_manager_audit_markdown_url(event_type: str, outcome: str, query: str, 
         params["limit"] = limit
     if scope != "active":
         params["scope"] = scope
+    if source != "all":
+        params["source"] = source
+    if source_file != "all":
+        params["source_file"] = source_file
     encoded = urlencode(params)
     return f"/tasks/audit.md?{encoded}" if encoded else "/tasks/audit.md"
 
 
 def _task_manager_audit_event_types(records: list[dict[str, Any]]) -> list[str]:
     return sorted({str(record.get("event_type") or "") for record in records if record.get("event_type")})
+
+
+def _task_manager_audit_source_file_options(records: list[dict[str, Any]]) -> list[dict[str, str]]:
+    counts: dict[str, int] = {}
+    for record in records:
+        source_file = str(record.get("_source_file") or "")
+        if not source_file:
+            continue
+        counts[source_file] = counts.get(source_file, 0) + 1
+    return [
+        {"value": source_file, "label": f"{source_file} ({counts[source_file]})"}
+        for source_file in sorted(counts)
+    ]
+
+
+def _task_manager_audit_source_options(records: list[dict[str, Any]]) -> list[dict[str, str]]:
+    active_count = sum(1 for record in records if str(record.get("_source_kind") or "active") == "active")
+    archive_count = sum(1 for record in records if str(record.get("_source_kind") or "active") == "archive")
+    return [
+        {"value": "all", "label": f"All sources ({len(records)})"},
+        {"value": "active", "label": f"Active only ({active_count})"},
+        {"value": "archive", "label": f"Archives only ({archive_count})"},
+    ]
+
+
+def _task_manager_audit_source_file_summary(records: list[dict[str, Any]]) -> str:
+    options = _task_manager_audit_source_file_options(records)
+    if not options:
+        return "-"
+    return ", ".join(str(option["label"]) for option in options)
 
 
 def _normalize_task_manager_audit_limit(limit: int) -> int:
@@ -2647,10 +2728,26 @@ def _normalize_task_manager_audit_scope(scope: str) -> str:
     return scope if scope in {"active", "all"} else "active"
 
 
+def _normalize_task_manager_audit_source(source: str) -> str:
+    return source if source in {"all", "active", "archive"} else "all"
+
+
 def _filter_task_manager_audit_records(records: list[dict[str, Any]], event_type: str) -> list[dict[str, Any]]:
     if event_type == "all":
         return records
     return [record for record in records if str(record.get("event_type") or "") == event_type]
+
+
+def _filter_task_manager_audit_records_by_source(records: list[dict[str, Any]], source: str) -> list[dict[str, Any]]:
+    if source == "all":
+        return records
+    return [record for record in records if str(record.get("_source_kind") or "active") == source]
+
+
+def _filter_task_manager_audit_records_by_source_file(records: list[dict[str, Any]], source_file: str) -> list[dict[str, Any]]:
+    if source_file == "all":
+        return records
+    return [record for record in records if str(record.get("_source_file") or "") == source_file]
 
 
 def _filter_task_manager_audit_records_by_outcome(records: list[dict[str, Any]], outcome: str) -> list[dict[str, Any]]:
@@ -2675,10 +2772,16 @@ def _task_manager_audit_active_filters(
     outcome_label: str,
     query: str,
     scope: str,
+    source: str,
+    source_file: str,
 ) -> list[str]:
     filters: list[str] = []
     if scope == "all":
         filters.append("范围: Active + archives")
+    if source != "all":
+        filters.append(f"Source: {source}")
+    if source_file != "all":
+        filters.append(f"Source file: {source_file}")
     if event_type != "all":
         filters.append(f"事件类型: {event_type}")
     if outcome != "all":
@@ -2707,6 +2810,9 @@ def _task_manager_audit_search_text(record: dict[str, Any]) -> str:
         "skipped_job_ids",
         "failed_job_ids",
         "run_ids",
+        "_source_file",
+        "_source_path",
+        "_source_kind",
     ]:
         parts.append(str(record.get(key) or ""))
     for nested_key in ["request_context", "details"]:
@@ -2729,6 +2835,8 @@ def _build_task_manager_audit_view_record(record: dict[str, Any]) -> dict[str, s
         "created_at": str(record.get("created_at") or ""),
         "actor": str(record.get("actor") or ""),
         "message": str(record.get("message") or ""),
+        "source_file": str(record.get("_source_file") or "-"),
+        "source_kind": str(record.get("_source_kind") or "active"),
         "selected_count": str(len(selected)),
         "processed_count": str(len(processed)),
         "skipped_count": str(len(skipped)),

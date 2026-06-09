@@ -56,6 +56,21 @@
               {% endfor %}
             </select>
           </label>
+          <label>Source
+            <select name="source">
+              {% for option in source_options %}
+              <option value="{{ option.value }}" {% if active_source == option.value %}selected{% endif %}>{{ option.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Source file
+            <select name="source_file">
+              <option value="all" {% if active_source_file == "all" %}selected{% endif %}>All files</option>
+              {% for source_file in source_file_options %}
+              <option value="{{ source_file.value }}" {% if active_source_file == source_file.value %}selected{% endif %}>{{ source_file.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
           <label>搜索
             <input name="q" value="{{ query }}" placeholder="Job ID、Run ID、事件或原因">
           </label>
@@ -92,6 +107,7 @@
                   <strong>{{ record.event_type }}</strong>
                   <span class="muted-line">{{ record.message }}</span>
                   <span class="muted-line">actor: {{ record.actor }}</span>
+                  <span class="muted-line">source: {{ record.source_kind }} / {{ record.source_file }}</span>
                 </td>
                 <td>
                   <span class="status-pill done">成功 {{ record.processed_count }}</span>
