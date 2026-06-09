@@ -403,3 +403,9 @@
 - 摘要：`WebJobAuditLog` 新增 active JSONL 大小阈值和归档保留数量，写入新审计事件前会在超过阈值时轮转 `.omx/web-job-audit.jsonl`，并保留当前页面/导出只读 active 文件的语义。
 - 产物：`orchestrator/infrastructure/persistence/web_job_audit_log.py`、`tests/test_web_job_audit_log.py`、`docs/codex/v1/trace/web-ui-operational-maintenance-hardening-trace.md`。
 - 验证：`python -m pytest -q tests/test_web_job_audit_log.py` 通过，`5 passed`；`python -m pytest -q tests/test_web_ui.py -k "task_manager or audit" tests/test_web_job_audit_log.py` 通过，`14 passed, 44 deselected`；`python -m py_compile orchestrator/infrastructure/persistence/web_job_audit_log.py orchestrator/interfaces/web/main.py` 通过；`python -m pytest -q tests/test_web_ui.py` 通过，`53 passed`；`python -m pytest -q` 通过，`143 passed`；`git diff --check` 通过。
+# 2026-06-09 Web Browser Smoke
+
+- Status: completed.
+- Summary: added `scripts/run_web_browser_smoke.py`, a real Uvicorn-process smoke that runs in `.tmp/web-browser-smoke`, checks `/`, `/tasks`, `/tasks/health.json`, submits the `mock_demo` template through `/templates/run`, waits for `/jobs/{job_id}` to redirect to `/runs/{run_id}`, and verifies the run detail plus task list over HTTP.
+- Artifacts: `scripts/run_web_browser_smoke.py`, `tests/test_web_browser_smoke.py`, `docs/codex/v1/plans/web-production-readiness-next.md`, `docs/codex/v1/trace/web-production-readiness-next-trace.md`, `.codex/plans/main/web-browser-smoke/process.md`.
+- Verification: `python scripts/run_web_browser_smoke.py` passed with `health_overall=pass` and `web_browser_smoke=passed`; `python -m py_compile scripts/run_web_browser_smoke.py` passed; `python -m pytest -q tests/test_web_browser_smoke.py` passed with `1 passed`; `python -m pytest -q tests/test_web_ui.py tests/test_web_browser_smoke.py tests/test_demo_readiness_smoke.py` passed with `61 passed`; `python -m pytest -q` passed with `151 passed`; `git diff --check` passed with only the existing Windows CRLF warning for `.codex/plans/main/TASKS.md`.
