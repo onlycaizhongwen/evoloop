@@ -6,7 +6,7 @@ Completed.
 
 ## Current Increment
 
-The first production-readiness increment adds a repeatable Web browser-path smoke. It runs the FastAPI app through Uvicorn in an isolated workspace and validates the main operator path over HTTP before future Playwright or real external-agent expansion.
+The production-readiness increment adds a repeatable Web browser-path smoke. It runs the FastAPI app through Uvicorn in an isolated process-scoped workspace and validates the main operator path over HTTP before future Playwright expansion.
 
 ## Covered Scope
 
@@ -19,6 +19,11 @@ The first production-readiness increment adds a repeatable Web browser-path smok
 - Job-to-run redirect.
 - Run detail page rendering.
 - Task manager visibility after the run.
+- Local-backend `codex` external-agent run creation.
+- Wrapper provenance rendering on run detail over HTTP.
+- Wrapper provenance export in run audit Markdown over HTTP.
+- Process-scoped smoke workspace isolation for concurrent test runs.
+- Stale `run-*` smoke workspace cleanup with current-directory and locked-directory safeguards.
 
 ## Remaining Work
 
@@ -34,3 +39,9 @@ The first production-readiness increment adds a repeatable Web browser-path smok
 - `python -m pytest -q tests/test_web_ui.py tests/test_web_browser_smoke.py tests/test_demo_readiness_smoke.py`: 63 passed.
 - `python -m pytest -q`: 155 passed.
 - `git diff --check`: passed; Git reported only Windows CRLF conversion warnings.
+- `python -m py_compile scripts/run_web_browser_smoke.py`: passed.
+- `python scripts/run_web_browser_smoke.py`: passed with `health_overall=pass`, `audit_archive_smoke=passed`, `wrapper_runtime=codex`, `wrapper_roles=coder,reviewer`, `wrapper_exit_codes=0,0`, `wrapper_backend_commands=2`, `web_external_agent_provenance_smoke=passed`, and `web_browser_smoke=passed`.
+- `python -m pytest -q tests/test_web_browser_smoke.py`: 1 passed.
+- `python -m py_compile scripts/run_web_browser_smoke.py tests/test_web_browser_smoke.py`: passed.
+- `python -m pytest -q tests/test_web_browser_smoke.py`: 2 passed.
+- `python scripts/run_web_browser_smoke.py`: passed with `web_external_agent_provenance_smoke=passed` and `web_browser_smoke=passed`.

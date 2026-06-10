@@ -332,6 +332,49 @@ def test_run_detail_shows_no_docker_evidence_for_local_run(monkeypatch, tmp_path
     assert "本次运行没有 Docker sandbox 执行记录" in response.text
 
 
+def test_run_detail_surfaces_external_agent_wrapper_provenance(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
+    run_dir = tmp_path / ".omx" / "runs" / "run-wrapper"
+    _write_run_state(tmp_path, "run-wrapper", "task-wrapper", RunStatus.DONE, "done")
+    (run_dir / "logs" / "external_agent_wrapper.log").write_text(
+        "\n".join(
+            [
+                "runtime=codex",
+                "role=coder",
+                "task_id=task-wrapper",
+                "prompt_file=.omx/runs/run-wrapper/prompts/coder.txt",
+                "reason_file=",
+                "backend_command=python backend.py task-wrapper",
+                "exit_code=0",
+                "---",
+                "runtime=codex",
+                "role=reviewer",
+                "task_id=task-wrapper",
+                "prompt_file=.omx/runs/run-wrapper/prompts/reviewer.txt",
+                "reason_file=.omx/runs/run-wrapper/reason.txt",
+                "dry_run=true",
+                "---",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    response = TestClient(app).get("/runs/run-wrapper")
+
+    assert response.status_code == 200
+    assert "Wrapper Command Provenance" in response.text
+    assert "External agent wrapper 日志" in response.text
+    assert "external_agent_wrapper.log" in response.text
+    assert "codex" in response.text
+    assert "coder, reviewer" in response.text
+    assert "python backend.py task-wrapper" in response.text
+    assert "<td>coder</td>" in response.text
+    assert "<td>reviewer</td>" in response.text
+    assert "<td>0</td>" in response.text
+    assert "<td>dry-run</td>" in response.text
+
+
 def test_run_detail_frontloads_halted_failure_reason(monkeypatch, tmp_path: Path):
     monkeypatch.chdir(tmp_path)
     run_dir = tmp_path / ".omx" / "runs" / "run-halted-reason"
@@ -553,6 +596,29 @@ def test_run_audit_markdown_exports_shareable_summary(monkeypatch, tmp_path: Pat
     )
     (run_dir / "final_report.md").write_text("Quality Gate passed\nReview confidence: 91", encoding="utf-8")
     (run_dir / "logs" / "phase.log").write_text("phase=done event=end\n", encoding="utf-8")
+    (run_dir / "logs" / "external_agent_wrapper.log").write_text(
+        "\n".join(
+            [
+                "runtime=codex",
+                "role=coder",
+                "task_id=task-audit",
+                "prompt_file=.omx/runs/run-audit/prompts/coder.txt",
+                "reason_file=",
+                "backend_command=python backend.py task-audit",
+                "exit_code=0",
+                "---",
+                "runtime=codex",
+                "role=reviewer",
+                "task_id=task-audit",
+                "prompt_file=.omx/runs/run-audit/prompts/reviewer.txt",
+                "reason_file=.omx/runs/run-audit/reason.txt",
+                "dry_run=true",
+                "---",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     (run_dir / "logs" / "docker_sandbox.jsonl").write_text(
         json.dumps(
             {
@@ -644,6 +710,14 @@ def test_run_audit_markdown_exports_shareable_summary(monkeypatch, tmp_path: Pat
     assert "- Agent: omx_team_patch" in response.text
     assert "- Image: python:3.12-slim" in response.text
     assert "- Network: none" in response.text
+    assert "## External Agent Wrapper" in response.text
+    assert "- Invocations: 2" in response.text
+    assert "- Runtime: codex" in response.text
+    assert "- Roles: coder, reviewer" in response.text
+    assert "- Last Exit: dry-run" in response.text
+    assert "- Last Command: -" in response.text
+    assert "codex / coder / task-audit / exit=0 / prompt=.omx/runs/run-audit/prompts/coder.txt / command=python backend.py task-audit" in response.text
+    assert "codex / reviewer / task-audit / exit=dry-run / prompt=.omx/runs/run-audit/prompts/reviewer.txt / command=-" in response.text
     assert "- Hard Checks: passed / test:passed:exit=0" in response.text
     assert "- Review: pass=True / confidence=91 / blocking=False / review ok" in response.text
     assert "- Quality Report: decision=done / score=100 / passed=True / quality gate passed" in response.text

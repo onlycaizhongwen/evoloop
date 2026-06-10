@@ -1,7 +1,7 @@
 # 项目状态
 
 - 当前版本：v1
-- 当前阶段：实现中
+- 当前阶段：生产就绪硬化中
 - 当前主题：自动循环进化编码智能体系统
 - 说明：此文件用于记录需求、设计、计划、实现与追踪的主线状态。
 
@@ -9,13 +9,28 @@
 
 | 主题 | 需求文档 | 设计文档 | 计划文档 | Trace 文档 |
 | :--- | :--- | :--- | :--- | :--- |
-| 自动循环进化编码智能体系统 | `docs/codex/v1/requirements/自动循环进化编码智能体系统-requirements.md` | `docs/codex/v1/designs/自动循环进化编码智能体系统-technical-design.md` | `docs/codex/v1/plans/自动循环进化编码智能体系统-mvp-plan.md` | 待补充 |
+| 自动循环进化编码智能体系统 | `docs/codex/v1/requirements/自动循环进化编码智能体系统-requirements.md` | `docs/codex/v1/designs/自动循环进化编码智能体系统-technical-design.md` | `docs/codex/v1/plans/自动循环进化编码智能体系统-mvp-plan.md` | `docs/codex/v1/trace/自动循环进化编码智能体系统-mvp-trace.md` |
 
 ## 进度与状态
 
 | 主题 | 当前状态 | 需求状态 | 设计状态 | 计划状态 | 实现状态 | 备注 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| 自动循环进化编码智能体系统 | 实现中 | 已完成 | 已完成 | 已完成 | 第四批命令安全与 heartbeat 完成 | 已创建 DDD 骨架，跑通 ShellAgent + ShellCheckRunner；新增 SafeCommandRunner、命令安全策略和 FileHeartbeat。 |
+| 自动循环进化编码智能体系统 | 生产就绪硬化中 | 已完成 | 已完成 | 已完成 | MVP 主链路、Web 运维硬化、真实 HTTP smoke、外部 agent 闭环 smoke 已完成 | 已具备 DDD 编排主链路、patch 审批/验证闭环、Web 任务管理/审计/健康检查、run artifact 清理、wrapper provenance 展示和 157 项回归测试基线。 |
+
+## 当前完成度快照
+
+- MVP 主链路：已完成。任务读取、Agent 执行、Review、Quality Gate、报告、pending patch 审批、rerun-task 验证闭环均已落地。
+- Web 运维能力：已完成主要硬化。任务管理、批量操作审计、审计轮转/归档搜索、source provenance、只读健康检查、Web Job 清理和 run artifact 清理均已覆盖。
+- 真实浏览器路径验证：已完成当前无新增依赖版本。`scripts/run_web_browser_smoke.py` 会启动真实 Uvicorn 进程，走 HTTP 页面/导出/模板运行/job 跳转/run detail 路径，并验证外部 agent wrapper provenance。
+- 真实 agent 执行闭环：已完成 credential-free 版本。`scripts/run_external_agent_closed_loop_smoke.py` 使用本地 backend 走 `codex` 外部命令适配器、wrapper 进程、review JSON、quality gate 和最终报告。
+- 当前未提交状态：最近一批生产就绪硬化改动仍在工作区，提交/推送需用户明确要求。
+
+## 剩余事项
+
+- 可选 Playwright 覆盖：需要先明确依赖安装和浏览器 binary provisioning 策略。
+- 可选真实 `omx` / `codex` 命令 smoke：需要本机运行时命令、凭据和环境配置可用后再作为 gated smoke 增加。
+- 可选破坏性维护路径浏览器 smoke：仅能在 seeded disposable artifacts 上验证，避免误删真实运行记录。
+- 历史文档清理：部分早期记录仍有乱码，可单独做一次只读核对后的文档清理，不阻塞当前功能闭环。
 
 ## 变更记录
 
@@ -406,16 +421,16 @@
 # 2026-06-09 Web Browser Smoke
 
 - Status: completed.
-- Summary: added `scripts/run_web_browser_smoke.py`, a real Uvicorn-process smoke that runs in `.tmp/web-browser-smoke`, checks `/`, `/tasks`, `/tasks/health.json`, archived audit source/source-file filtering, audit Markdown export, submits the `mock_demo` template through `/templates/run`, waits for `/jobs/{job_id}` to redirect to `/runs/{run_id}`, and verifies the run detail plus task list over HTTP.
+- Summary: added `scripts/run_web_browser_smoke.py`, a real Uvicorn-process smoke that runs in process-scoped `.tmp/web-browser-smoke/run-{pid}` workspaces, prunes stale sibling `run-*` workspaces older than 24 hours, checks `/`, `/tasks`, `/tasks/health.json`, archived audit source/source-file filtering, audit Markdown export, submits the `mock_demo` template through `/templates/run`, waits for `/jobs/{job_id}` to redirect to `/runs/{run_id}`, verifies run detail plus task list over HTTP, and now proves external-agent wrapper provenance through `/runs/{run_id}` plus `/runs/{run_id}/audit.md`.
 - Artifacts: `scripts/run_web_browser_smoke.py`, `tests/test_web_browser_smoke.py`, `docs/codex/v1/plans/web-production-readiness-next.md`, `docs/codex/v1/trace/web-production-readiness-next-trace.md`, `.codex/plans/main/web-browser-smoke/process.md`.
-- Verification: `python scripts/run_web_browser_smoke.py` passed with `health_overall=pass`, `audit_archive_smoke=passed`, and `web_browser_smoke=passed`; `python -m py_compile scripts/run_web_browser_smoke.py orchestrator/interfaces/web/main.py orchestrator/infrastructure/persistence/web_job_audit_log.py` passed; `python -m pytest -q tests/test_web_browser_smoke.py` passed with `1 passed`; `python -m pytest -q tests/test_web_ui.py tests/test_web_browser_smoke.py tests/test_demo_readiness_smoke.py` passed with `63 passed`; `python -m pytest -q` passed with `155 passed`; `git diff --check` passed with only Windows CRLF warnings.
+- Verification: `python scripts/run_web_browser_smoke.py` passed with `health_overall=pass`, `audit_archive_smoke=passed`, `wrapper_runtime=codex`, `wrapper_roles=coder,reviewer`, `wrapper_exit_codes=0,0`, `wrapper_backend_commands=2`, `web_external_agent_provenance_smoke=passed`, and `web_browser_smoke=passed`; `python -m py_compile scripts/run_web_browser_smoke.py tests/test_web_browser_smoke.py` passed; `python -m pytest -q tests/test_web_browser_smoke.py` passed with `2 passed`; `python -m pytest -q tests/test_web_ui.py tests/test_web_browser_smoke.py tests/test_demo_readiness_smoke.py` passed with `63 passed`; `python -m pytest -q` passed with `155 passed`; `git diff --check` passed with only Windows CRLF warnings.
 
 # 2026-06-09 External Agent Closed Loop Smoke
 
 - Status: completed.
-- Summary: added `scripts/run_external_agent_closed_loop_smoke.py`, which generates an isolated task/worktree, runs the CLI with the real `codex` external-command adapter, invokes `scripts/run_external_agent.py` wrapper processes for coder/reviewer roles, validates reviewer JSON, passes the quality gate, and verifies run artifacts. `scripts/run_external_agent.py` now writes wrapper logs for real backend executions as well as dry runs.
-- Artifacts: `scripts/run_external_agent_closed_loop_smoke.py`, `tests/test_external_agent_closed_loop_smoke.py`, `scripts/run_external_agent.py`, `docs/codex/v1/plans/external-agent-closed-loop-smoke.md`, `docs/codex/v1/trace/external-agent-closed-loop-smoke-trace.md`, `.codex/plans/main/external-agent-closed-loop-smoke/process.md`.
-- Verification: `python scripts/run_external_agent_closed_loop_smoke.py` passed with `external_agent_closed_loop_smoke=passed`; `python -m py_compile scripts/run_external_agent.py scripts/run_external_agent_closed_loop_smoke.py` passed; `python -m pytest -q tests/test_external_agent_closed_loop_smoke.py tests/test_external_agent.py tests/test_external_agent_wrapper.py` passed with `17 passed`; `python -m pytest -q tests/test_external_agent_closed_loop_smoke.py tests/test_external_agent.py tests/test_external_agent_wrapper.py tests/test_web_browser_smoke.py tests/test_demo_readiness_smoke.py` passed with `19 passed`; `python -m pytest -q` passed with `152 passed`; `git diff --check` passed with only Windows CRLF warnings.
+- Summary: added `scripts/run_external_agent_closed_loop_smoke.py`, which generates an isolated task/worktree, runs the CLI with the real `codex` external-command adapter, invokes `scripts/run_external_agent.py` wrapper processes for coder/reviewer roles, validates reviewer JSON, passes the quality gate, verifies run artifacts, and now asserts wrapper runtime/role/exit-code/backend-command provenance. `scripts/run_external_agent.py` writes wrapper logs for real backend executions as well as dry runs, and Web run detail plus run audit Markdown surface wrapper command provenance from those logs.
+- Artifacts: `scripts/run_external_agent_closed_loop_smoke.py`, `tests/test_external_agent_closed_loop_smoke.py`, `scripts/run_external_agent.py`, `orchestrator/interfaces/web/main.py`, `orchestrator/interfaces/web/templates/run_detail.html`, `tests/test_web_ui.py`, `docs/codex/v1/plans/external-agent-closed-loop-smoke.md`, `docs/codex/v1/trace/external-agent-closed-loop-smoke-trace.md`, `.codex/plans/main/external-agent-closed-loop-smoke/process.md`.
+- Verification: `python scripts/run_external_agent_closed_loop_smoke.py` passed with `wrapper_runtime=codex`, `wrapper_roles=coder,reviewer`, `wrapper_exit_codes=0,0`, `wrapper_backend_commands=2`, and `external_agent_closed_loop_smoke=passed`; `python -m py_compile scripts/run_external_agent.py scripts/run_external_agent_closed_loop_smoke.py` passed; `python -m pytest -q tests/test_external_agent_closed_loop_smoke.py tests/test_external_agent.py tests/test_external_agent_wrapper.py` passed with `17 passed`; `python -m pytest -q tests/test_external_agent_closed_loop_smoke.py tests/test_external_agent.py tests/test_external_agent_wrapper.py tests/test_web_browser_smoke.py tests/test_demo_readiness_smoke.py` passed with `19 passed`; `python -m py_compile orchestrator/interfaces/web/main.py` passed; `python -m pytest -q tests/test_web_ui.py -k "run_audit_markdown or wrapper_provenance or run_detail"` passed with `9 passed, 53 deselected`; `python -m pytest -q tests/test_web_ui.py` passed with `62 passed`; `python -m pytest -q` passed with `156 passed`; `git diff --check` passed with only Windows CRLF warnings.
 
 # 2026-06-09 Web Audit Archive Search
 

@@ -99,6 +99,13 @@
 
 # TASKS
 
+# 2026-06-09 Web External Agent Wrapper Provenance
+
+- Status: completed.
+- Summary: Run detail and exported run audit Markdown now surface `logs/external_agent_wrapper.log` as structured wrapper command provenance, including runtime, roles, task ID, exit code/dry-run status, backend command, prompt file, and raw diagnostics.
+- Process file: `.codex/plans/main/external-agent-closed-loop-smoke/process.md`
+- Verification: `python -m py_compile orchestrator/interfaces/web/main.py` passed; `python -m pytest -q tests/test_web_ui.py -k "run_audit_markdown or wrapper_provenance or run_detail"` passed with `9 passed, 53 deselected`.
+
 ## v1-自动循环进化编码智能体系统-文档补齐
 - 状态：已完成
 - 摘要：基于 V7 架构设计补齐需求文档、对外技术文档、MVP 实施计划和演讲大纲。
@@ -335,6 +342,6 @@
 # 2026-06-09 Web Browser Smoke
 
 - Status: completed.
-- Summary: add a real Uvicorn-process Web smoke that exercises the main operator path over HTTP in `.tmp/web-browser-smoke`, starting with stable standard-library checks before adopting Playwright.
+- Summary: add a real Uvicorn-process Web smoke that exercises the main operator path over HTTP in process-scoped `.tmp/web-browser-smoke/run-{pid}` workspaces with stale `run-*` cleanup, including archived audit provenance, mock template run flow, and external-agent wrapper provenance on run detail plus run audit Markdown.
 - Process file: `.codex/plans/main/web-browser-smoke/process.md`
-- Verification: `python scripts/run_web_browser_smoke.py` passed with `web_browser_smoke=passed`; `python -m pytest -q tests/test_web_browser_smoke.py` passed with `1 passed`; `python -m pytest -q` passed with `151 passed`.
+- Verification: `python scripts/run_web_browser_smoke.py` passed with `web_external_agent_provenance_smoke=passed` and `web_browser_smoke=passed`; `python -m pytest -q tests/test_web_browser_smoke.py` passed with `2 passed`; `python -m pytest -q` passed with `151 passed`.

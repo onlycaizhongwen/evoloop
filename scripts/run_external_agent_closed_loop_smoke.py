@@ -37,6 +37,16 @@ def main() -> int:
         print(f"{key}={value}")
     if not all(evidence.values()):
         return 1
+    wrapper_evidence = collect_wrapper_evidence(run_dir)
+    for key, value in wrapper_evidence.items():
+        print(f"{key}={value}")
+    if (
+        wrapper_evidence["wrapper_runtime"] != "codex"
+        or wrapper_evidence["wrapper_roles"] != "coder,reviewer"
+        or wrapper_evidence["wrapper_exit_codes"] != "0,0"
+        or wrapper_evidence["wrapper_backend_commands"] != "2"
+    ):
+        return 1
 
     review = json.loads((run_dir / "attempts" / "001" / "review.json").read_text(encoding="utf-8"))
     if review.get("recommended_next_action") != "pass":
@@ -167,6 +177,41 @@ def collect_evidence(run_dir: Path) -> dict[str, bool]:
         "final_report_exists": (run_dir / "final_report.md").exists(),
         "backend_marker_exists": (SMOKE_DIR / "backend-marker.txt").exists(),
     }
+
+
+def collect_wrapper_evidence(run_dir: Path) -> dict[str, str]:
+    entries = parse_wrapper_log(run_dir / "logs" / "external_agent_wrapper.log")
+    roles = sorted({entry.get("role", "") for entry in entries if entry.get("role")})
+    runtimes = sorted({entry.get("runtime", "") for entry in entries if entry.get("runtime")})
+    exit_codes = [entry.get("exit_code", "") for entry in entries if entry.get("exit_code")]
+    backend_commands = [entry.get("backend_command", "") for entry in entries if entry.get("backend_command")]
+    return {
+        "wrapper_runtime": ",".join(runtimes),
+        "wrapper_roles": ",".join(roles),
+        "wrapper_exit_codes": ",".join(exit_codes),
+        "wrapper_backend_commands": str(len(backend_commands)),
+    }
+
+
+def parse_wrapper_log(path: Path) -> list[dict[str, str]]:
+    entries: list[dict[str, str]] = []
+    current: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped == "---":
+            if current:
+                entries.append(current)
+                current = {}
+            continue
+        if "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        current[key.strip()] = value.strip()
+    if current:
+        entries.append(current)
+    return entries
 
 
 if __name__ == "__main__":

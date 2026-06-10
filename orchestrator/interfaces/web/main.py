@@ -733,6 +733,7 @@ def run_detail(request: Request, run_id: str, rerun_error: str = ""):
     final_report = _read_optional(run_dir / "final_report.md")
     phase_log = _read_optional(run_dir / "logs" / "phase.log")
     docker_evidence = _load_docker_evidence(run_dir)
+    external_agent_evidence = _load_external_agent_wrapper_evidence(run_dir)
     phase_timeline = _parse_phase_timeline(phase_log)
     validation_evidence = _load_validation_evidence(run_dir, state.attempt)
     run_can_rerun = FileStateRepository().task_path_for_run(_safe_id(run_id)).exists()
@@ -755,6 +756,7 @@ def run_detail(request: Request, run_id: str, rerun_error: str = ""):
                 patches=patches,
             ),
             "run_artifacts": _build_run_artifacts(run_dir, task_context, patches),
+            "external_agent_evidence": external_agent_evidence,
             "task_context": task_context,
             "task_meta": _build_run_task_meta(state, task_context),
             "run_can_rerun": run_can_rerun,
@@ -783,6 +785,7 @@ def run_audit_markdown(run_id: str):
     final_report = _read_optional(run_dir / "final_report.md")
     phase_log = _read_optional(run_dir / "logs" / "phase.log")
     docker_evidence = _load_docker_evidence(run_dir)
+    external_agent_evidence = _load_external_agent_wrapper_evidence(run_dir)
     phase_timeline = _parse_phase_timeline(phase_log)
     validation_evidence = _load_validation_evidence(run_dir, state.attempt)
     content = _build_run_audit_markdown(
@@ -793,6 +796,7 @@ def run_audit_markdown(run_id: str):
         final_report=final_report,
         phase_log=phase_log,
         docker_evidence=docker_evidence,
+        external_agent_evidence=external_agent_evidence,
         phase_timeline=phase_timeline,
         validation_evidence=validation_evidence,
     )
@@ -1885,6 +1889,7 @@ def _build_run_artifacts(run_dir: Path, task_context: dict[str, str], patches: l
         "phase_log": run_dir / "logs" / "phase.log",
         "heartbeat_log": run_dir / "logs" / "heartbeat.log",
         "agent_log": run_dir / "logs" / "agent.log",
+        "external_agent_wrapper_log": run_dir / "logs" / "external_agent_wrapper.log",
         "docker_log": run_dir / "logs" / "docker_sandbox.jsonl",
     }
     artifact_rows = [
@@ -1894,6 +1899,7 @@ def _build_run_artifacts(run_dir: Path, task_context: dict[str, str], patches: l
         _artifact_row("阶段日志", files["phase_log"]),
         _artifact_row("心跳日志", files["heartbeat_log"]),
         _artifact_row("Agent 日志", files["agent_log"]),
+        _artifact_row("External agent wrapper 日志", files["external_agent_wrapper_log"]),
         _artifact_row("Docker 日志", files["docker_log"]),
     ]
     changed_files = _changed_files_from_patches(patches)
@@ -2012,6 +2018,7 @@ def _build_run_audit_markdown(
     final_report: str,
     phase_log: str,
     docker_evidence: dict[str, object],
+    external_agent_evidence: dict[str, object],
     phase_timeline: list[dict[str, str]],
     validation_evidence: dict[str, object],
 ) -> str:
@@ -2096,6 +2103,35 @@ def _build_run_audit_markdown(
     else:
         lines.append("- Enabled: no")
 
+    lines.extend(["", "## External Agent Wrapper"])
+    if external_agent_evidence.get("enabled"):
+        lines.extend(
+            [
+                f"- Invocations: {external_agent_evidence.get('count') or 0}",
+                f"- Runtime: {external_agent_evidence.get('runtime') or '-'}",
+                f"- Roles: {external_agent_evidence.get('roles') or '-'}",
+                f"- Last Exit: {external_agent_evidence.get('last_exit_code') or '-'}",
+                f"- Last Command: {external_agent_evidence.get('last_backend_command') or '-'}",
+                f"- Log: {external_agent_evidence.get('log_path') or '-'}",
+            ]
+        )
+        rows = external_agent_evidence.get("rows")
+        if isinstance(rows, list) and rows:
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                lines.append(
+                    "- "
+                    f"{row.get('runtime') or '-'} / "
+                    f"{row.get('role') or '-'} / "
+                    f"{row.get('task_id') or '-'} / "
+                    f"exit={row.get('exit_code') or '-'} / "
+                    f"prompt={row.get('prompt_file') or '-'} / "
+                    f"command={row.get('backend_command') or '-'}"
+                )
+    else:
+        lines.append("- Enabled: no")
+
     lines.extend(
         [
             "",
@@ -2143,6 +2179,73 @@ def _patch_artifact_row(patch: dict[str, object]) -> dict[str, str]:
         "status": str(patch.get("status") or "未记录"),
         "risk_score": str(patch.get("risk_score") or "未记录"),
         "files": str(patch.get("files") or "暂无变更文件记录"),
+    }
+
+
+def _load_external_agent_wrapper_evidence(run_dir: Path) -> dict[str, object]:
+    log_path = run_dir / "logs" / "external_agent_wrapper.log"
+    if not log_path.exists():
+        return {
+            "enabled": False,
+            "count": 0,
+            "summary": "No external agent wrapper evidence recorded.",
+            "log_path": log_path.as_posix(),
+            "roles": "-",
+            "runtime": "-",
+            "last_exit_code": "-",
+            "last_backend_command": "-",
+            "rows": [],
+            "raw_log": "",
+        }
+    raw_log = _read_optional(log_path)
+    entries = _parse_external_agent_wrapper_log(raw_log)
+    roles = sorted({entry.get("role", "") for entry in entries if entry.get("role")})
+    runtimes = sorted({entry.get("runtime", "") for entry in entries if entry.get("runtime")})
+    last = entries[-1] if entries else {}
+    return {
+        "enabled": True,
+        "count": len(entries),
+        "summary": f"{len(entries)} wrapper invocations recorded.",
+        "log_path": log_path.as_posix(),
+        "roles": ", ".join(roles) if roles else "-",
+        "runtime": ", ".join(runtimes) if runtimes else "-",
+        "last_exit_code": last.get("exit_code") or ("dry-run" if last.get("dry_run") == "true" else "-"),
+        "last_backend_command": last.get("backend_command") or "-",
+        "rows": [_external_agent_wrapper_row(entry) for entry in entries[-10:]],
+        "raw_log": raw_log,
+    }
+
+
+def _parse_external_agent_wrapper_log(raw_log: str) -> list[dict[str, str]]:
+    entries: list[dict[str, str]] = []
+    current: dict[str, str] = {}
+    for line in raw_log.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped == "---":
+            if current:
+                entries.append(current)
+                current = {}
+            continue
+        if "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        current[key.strip()] = value.strip()
+    if current:
+        entries.append(current)
+    return entries
+
+
+def _external_agent_wrapper_row(entry: dict[str, str]) -> dict[str, str]:
+    return {
+        "runtime": entry.get("runtime") or "-",
+        "role": entry.get("role") or "-",
+        "task_id": entry.get("task_id") or "-",
+        "exit_code": entry.get("exit_code") or ("dry-run" if entry.get("dry_run") == "true" else "-"),
+        "backend_command": entry.get("backend_command") or "-",
+        "prompt_file": entry.get("prompt_file") or "-",
+        "reason_file": entry.get("reason_file") or "-",
     }
 
 

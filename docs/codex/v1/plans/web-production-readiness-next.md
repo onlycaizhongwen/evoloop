@@ -16,15 +16,21 @@ Add a script-level smoke that starts a real Uvicorn process in an isolated works
 - `/templates/run`
 - `/jobs/{job_id}`
 - `/runs/{run_id}`
+- `/runs/{run_id}/audit.md`
 
-The first increment intentionally uses only the Python standard library plus the existing Uvicorn/FastAPI stack. This avoids making local readiness depend on installing Playwright or browser binaries before the project has a committed browser-test dependency policy.
+The increment intentionally uses only the Python standard library plus the existing Uvicorn/FastAPI stack. This avoids making local readiness depend on installing Playwright or browser binaries before the project has a committed browser-test dependency policy.
+
+The smoke now also creates a local-backend `codex` external-agent run inside the same process-scoped workspace and verifies wrapper command provenance through real HTTP page/export requests. It remains credential-free because the wrapper delegates to a deterministic local backend command.
+
+Each invocation uses its own `run-{pid}` workspace to tolerate concurrent pytest runs, and it prunes stale `run-*` workspaces older than 24 hours while ignoring locked directories.
 
 ## Acceptance Criteria
 
 - The smoke starts the Web app as a real server process, not only through `TestClient`.
-- The smoke uses an isolated `.tmp/web-browser-smoke` workspace and does not mutate project task history.
+- The smoke uses an isolated `.tmp/web-browser-smoke/run-{pid}` workspace, prunes stale sibling workspaces, and does not mutate project task history.
 - The smoke verifies health JSON, task manager controls, template-run redirect, job completion, run detail rendering, and task-list visibility.
 - The smoke verifies archived audit source provenance and source/source-file filtering over real HTTP requests.
+- The smoke verifies external-agent wrapper provenance on run detail and exported run audit Markdown over real HTTP requests.
 - A pytest wrapper covers the script.
 
 ## Follow-Up Candidates

@@ -15,9 +15,12 @@ Add a repeatable smoke that proves the external command-agent contract works fro
 
 - The CLI returns `RunStatus.DONE`.
 - The run directory contains `run_state.json`, `logs/agent.log`, `logs/external_agent_wrapper.log`, `attempts/001/review.json`, `attempts/001/quality_report.json`, and `final_report.md`.
+- The smoke verifies wrapper runtime, role, exit-code, and backend-command provenance from `logs/external_agent_wrapper.log`.
 - A pytest wrapper covers the smoke script.
+- Web run detail surfaces wrapper command provenance from `logs/external_agent_wrapper.log`.
+- Run audit Markdown exports the same wrapper command provenance for offline review.
 
 ## Follow-Up Candidates
 
 - Add an opt-in real `omx` / `codex` command smoke when runtime configuration is present.
-- Surface wrapper evidence in Web run detail if operators need command-level provenance.
+- Add deeper real-command browser smoke once runtime credentials and command configuration are available.

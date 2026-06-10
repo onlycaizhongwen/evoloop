@@ -286,6 +286,53 @@
 
     <section class="panel">
       <div class="section-title compact">
+        <div>
+          <p class="eyebrow">External Agent</p>
+          <h2>Wrapper Command Provenance</h2>
+        </div>
+      </div>
+      {% if external_agent_evidence.enabled %}
+      <div class="evidence-grid">
+        <div><span>Invocations</span><strong>{{ external_agent_evidence.count }}</strong></div>
+        <div><span>Runtime</span><strong>{{ external_agent_evidence.runtime }}</strong></div>
+        <div><span>Roles</span><strong>{{ external_agent_evidence.roles }}</strong></div>
+        <div><span>Last exit</span><strong>{{ external_agent_evidence.last_exit_code }}</strong></div>
+        <div><span>Wrapper log</span><strong>{{ external_agent_evidence.log_path }}</strong></div>
+        <div><span>Last command</span><strong>{{ external_agent_evidence.last_backend_command }}</strong></div>
+      </div>
+      <div class="artifact-table-wrap">
+        <table class="artifact-table">
+          <thead>
+            <tr>
+              <th>Runtime</th>
+              <th>Role</th>
+              <th>Task</th>
+              <th>Exit</th>
+              <th>Command</th>
+              <th>Prompt</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in external_agent_evidence.rows %}
+            <tr>
+              <td>{{ item.runtime }}</td>
+              <td>{{ item.role }}</td>
+              <td>{{ item.task_id }}</td>
+              <td>{{ item.exit_code }}</td>
+              <td>{{ item.backend_command }}</td>
+              <td>{{ item.prompt_file }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="empty">{{ external_agent_evidence.summary }}</p>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <div class="section-title compact">
         <h2>任务操作</h2>
         <div class="actions">
           {% if run_can_rerun %}
@@ -411,6 +458,10 @@
         <section>
           <h2>Agent 日志</h2>
           <pre>{{ agent_log or "暂无 agent.log" }}</pre>
+        </section>
+        <section>
+          <h2>External Agent Wrapper Log</h2>
+          <pre>{{ external_agent_evidence.raw_log or "暂无 external_agent_wrapper.log" }}</pre>
         </section>
         <section>
           <h2>Team Result</h2>
