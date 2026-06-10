@@ -17,10 +17,13 @@ Add a script-level smoke that starts a real Uvicorn process in an isolated works
 - `/jobs/{job_id}`
 - `/runs/{run_id}`
 - `/runs/{run_id}/audit.md`
+- `/tasks/maintenance/prune-runs`
 
 The increment intentionally uses only the Python standard library plus the existing Uvicorn/FastAPI stack. This avoids making local readiness depend on installing Playwright or browser binaries before the project has a committed browser-test dependency policy.
 
 The smoke now also creates a local-backend `codex` external-agent run inside the same process-scoped workspace and verifies wrapper command provenance through real HTTP page/export requests. It remains credential-free because the wrapper delegates to a deterministic local backend command.
+
+The smoke also seeds disposable old, fresh, running-linked, and malformed run artifact directories, posts the run-artifact cleanup maintenance form over HTTP, and verifies that only eligible old artifacts are deleted while audit evidence is written.
 
 Each invocation uses its own `run-{pid}` workspace to tolerate concurrent pytest runs, and it prunes stale `run-*` workspaces older than 24 hours while ignoring locked directories.
 
@@ -30,6 +33,7 @@ Each invocation uses its own `run-{pid}` workspace to tolerate concurrent pytest
 - The smoke uses an isolated `.tmp/web-browser-smoke/run-{pid}` workspace, prunes stale sibling workspaces, and does not mutate project task history.
 - The smoke verifies health JSON, task manager controls, template-run redirect, job completion, run detail rendering, and task-list visibility.
 - The smoke verifies archived audit source provenance and source/source-file filtering over real HTTP requests.
+- The smoke verifies destructive run-artifact maintenance cleanup using seeded disposable artifacts only.
 - The smoke verifies external-agent wrapper provenance on run detail and exported run audit Markdown over real HTTP requests.
 - A pytest wrapper covers the script.
 
@@ -37,4 +41,4 @@ Each invocation uses its own `run-{pid}` workspace to tolerate concurrent pytest
 
 - Add optional Playwright coverage once dependency installation and browser binary provisioning are explicit.
 - Add a real external-agent smoke variant gated by available `omx` / `codex` command configuration.
-- Add production maintenance controls for archived audit search and explicit run-artifact cleanup.
+- Add deeper production maintenance browser coverage only for newly introduced destructive controls, with seeded disposable artifacts.

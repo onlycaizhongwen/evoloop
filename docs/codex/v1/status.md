@@ -21,7 +21,7 @@
 
 - MVP 主链路：已完成。任务读取、Agent 执行、Review、Quality Gate、报告、pending patch 审批、rerun-task 验证闭环均已落地。
 - Web 运维能力：已完成主要硬化。任务管理、批量操作审计、审计轮转/归档搜索、source provenance、只读健康检查、Web Job 清理和 run artifact 清理均已覆盖。
-- 真实浏览器路径验证：已完成当前无新增依赖版本。`scripts/run_web_browser_smoke.py` 会启动真实 Uvicorn 进程，走 HTTP 页面/导出/模板运行/job 跳转/run detail 路径，并验证外部 agent wrapper provenance。
+- 真实浏览器路径验证：已完成当前无新增依赖版本。`scripts/run_web_browser_smoke.py` 会启动真实 Uvicorn 进程，走 HTTP 页面/导出/模板运行/job 跳转/run detail 路径，验证外部 agent wrapper provenance，并用 seeded disposable artifacts 覆盖 run artifact 清理这种破坏性维护路径。
 - 真实 agent 执行闭环：已完成 credential-free 版本和 opt-in 真实命令 gate。`scripts/run_external_agent_closed_loop_smoke.py` 使用本地 backend 走 `codex` 外部命令适配器、wrapper 进程、review JSON、quality gate 和最终报告；`scripts/run_real_external_agent_smoke.py` 在 `OMX_RUN_REAL_EXTERNAL_AGENT_SMOKE=1` 且 runtime backend 命令配置齐全时验证真实 `codex` / `omx` wrapper 命令闭环。
 - 当前未提交状态：最近一批生产就绪硬化改动仍在工作区，提交/推送需用户明确要求。
 
@@ -29,7 +29,7 @@
 
 - 可选 Playwright 覆盖：需要先明确依赖安装和浏览器 binary provisioning 策略。
 - 可选真实 `omx` / `codex` 命令实跑：gated smoke 入口已新增；仍需要本机运行时命令、凭据和环境配置可用后执行。
-- 可选破坏性维护路径浏览器 smoke：仅能在 seeded disposable artifacts 上验证，避免误删真实运行记录。
+- 可选新增维护控制 smoke：现有 run artifact 清理已由 seeded disposable HTTP smoke 覆盖；后续仅在新增破坏性控制时补同类验证。
 - 历史文档清理：部分早期记录仍有乱码，可单独做一次只读核对后的文档清理，不阻塞当前功能闭环。
 
 ## 变更记录

@@ -7,6 +7,7 @@ import socket
 import subprocess
 import sys
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -81,6 +82,10 @@ def main() -> int:
         assert_page_contains(base_url + final_path, ["Run", "task-mock-web-001"])
         assert_page_contains(base_url + "/tasks", ["task-mock-web-001", "mock_demo"])
 
+        maintenance_evidence = seed_maintenance_artifacts()
+        assert_maintenance_prune_runs(base_url, maintenance_evidence)
+        print("maintenance_prune_runs_smoke=passed")
+
         external_run_id = run_external_agent_web_provenance()
         external_run_path = f"/runs/{external_run_id}"
         assert_page_contains(
@@ -146,6 +151,140 @@ def reset_smoke_workspace() -> None:
         + "\n",
         encoding="utf-8",
     )
+
+
+def seed_maintenance_artifacts() -> dict[str, Path]:
+    runs_dir = SMOKE_DIR / ".omx" / "runs"
+    old_orphan_run = runs_dir / "run-web-smoke-old-orphan"
+    old_done_run = runs_dir / "run-web-smoke-old-done-artifact"
+    old_running_run = runs_dir / "run-web-smoke-old-running-artifact"
+    fresh_run = runs_dir / "run-web-smoke-fresh-artifact"
+    missing_state_run = runs_dir / "run-web-smoke-missing-state"
+    for run_dir in [old_orphan_run, old_done_run, old_running_run, fresh_run, missing_state_run]:
+        run_dir.mkdir(parents=True, exist_ok=True)
+    for run_dir in [old_orphan_run, old_done_run, old_running_run, fresh_run]:
+        (run_dir / "run_state.json").write_text(json.dumps({"run_id": run_dir.name}), encoding="utf-8")
+
+    old_epoch = time.time() - (40 * 24 * 60 * 60)
+    for run_dir in [old_orphan_run, old_done_run, old_running_run, missing_state_run]:
+        os.utime(run_dir, (old_epoch, old_epoch))
+
+    old_timestamp = (datetime.now() - timedelta(days=40)).isoformat()
+    db_path = SMOKE_DIR / ".omx" / "orchestrator.db"
+    seed_job_repository(
+        db_path,
+        {
+            "job_id": "job-web-smoke-done-artifact",
+            "status": "done",
+            "message": "done",
+            "task_path": "",
+            "run_id": old_done_run.name,
+            "started_at": old_timestamp,
+            "finished_at": old_timestamp,
+            "updated_at": old_timestamp,
+        },
+    )
+    seed_job_repository(
+        db_path,
+        {
+            "job_id": "job-web-smoke-running-artifact",
+            "status": "running",
+            "message": "running",
+            "task_path": "",
+            "run_id": old_running_run.name,
+            "started_at": old_timestamp,
+            "finished_at": "",
+            "updated_at": old_timestamp,
+        },
+    )
+    return {
+        "old_orphan_run": old_orphan_run,
+        "old_done_run": old_done_run,
+        "old_running_run": old_running_run,
+        "fresh_run": fresh_run,
+        "missing_state_run": missing_state_run,
+    }
+
+
+def seed_job_repository(db_path: Path, payload: dict[str, str]) -> None:
+    import sqlite3
+
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS web_jobs (
+                job_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL,
+                message TEXT NOT NULL DEFAULT '',
+                task_path TEXT NOT NULL DEFAULT '',
+                run_id TEXT NOT NULL DEFAULT '',
+                started_at TEXT NOT NULL DEFAULT '',
+                finished_at TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO web_jobs (
+                job_id, status, message, task_path, run_id, started_at, finished_at, updated_at
+            )
+            VALUES (
+                :job_id, :status, :message, :task_path, :run_id, :started_at, :finished_at, :updated_at
+            )
+            """,
+            payload,
+        )
+
+
+def assert_maintenance_prune_runs(base_url: str, evidence: dict[str, Path]) -> None:
+    location = post_form(
+        base_url + "/tasks/maintenance/prune-runs",
+        {
+            "older_than_days": "30",
+            "status": "all",
+            "quality": "all",
+            "rerun": "all",
+            "page": "1",
+            "page_size": "10",
+            "q": "",
+        },
+    )
+    print(f"maintenance_prune_runs_redirect={location}")
+    if not location.startswith("/tasks"):
+        raise AssertionError(f"unexpected maintenance redirect={location}")
+
+    assert not evidence["old_orphan_run"].exists()
+    assert not evidence["old_done_run"].exists()
+    assert evidence["old_running_run"].exists()
+    assert evidence["fresh_run"].exists()
+    assert evidence["missing_state_run"].exists()
+
+    audit_event = latest_audit_event("maintenance_prune_runs")
+    deleted_run_dirs = set(audit_event.get("details", {}).get("deleted_run_dirs", []))
+    if deleted_run_dirs != {str(evidence["old_orphan_run"].resolve()), str(evidence["old_done_run"].resolve())}:
+        raise AssertionError(f"unexpected deleted_run_dirs={deleted_run_dirs}")
+    skipped = set(audit_event.get("skipped_job_ids", []))
+    if evidence["old_running_run"].name not in skipped or evidence["missing_state_run"].name not in skipped:
+        raise AssertionError(f"unexpected skipped_job_ids={skipped}")
+    assert_page_contains(
+        base_url + "/tasks/audit?event_type=maintenance_prune_runs&q=run-web-smoke-old-orphan",
+        ["maintenance_prune_runs", "run-web-smoke-old-orphan", "run-web-smoke-old-done-artifact"],
+    )
+
+
+def latest_audit_event(event_type: str) -> dict:
+    audit_path = SMOKE_DIR / ".omx" / "web-job-audit.jsonl"
+    events = [
+        json.loads(line)
+        for line in audit_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    for event in reversed(events):
+        if event.get("event_type") == event_type:
+            return event
+    raise AssertionError(f"missing audit event {event_type}")
 
 
 def cleanup_stale_smoke_workspaces(

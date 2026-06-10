@@ -5,7 +5,7 @@
 - Task need: advance production readiness with a repeatable real-server Web smoke.
 - Key decision: first use Uvicorn plus standard-library HTTP checks instead of adding Playwright dependency.
 - Current phase: completed.
-- Completed artifacts: `scripts/run_web_browser_smoke.py`, `tests/test_web_browser_smoke.py`, external-agent wrapper provenance HTTP coverage, process-scoped smoke workspace cleanup, `docs/codex/v1/plans/web-production-readiness-next.md`, `docs/codex/v1/trace/web-production-readiness-next-trace.md`.
+- Completed artifacts: `scripts/run_web_browser_smoke.py`, `tests/test_web_browser_smoke.py`, external-agent wrapper provenance HTTP coverage, disposable maintenance prune-runs HTTP coverage, process-scoped smoke workspace cleanup, `docs/codex/v1/plans/web-production-readiness-next.md`, `docs/codex/v1/trace/web-production-readiness-next-trace.md`.
 - Remaining work: none for this slice. Do not commit unless the user asks.
 - Important finding: repository has FastAPI/Uvicorn but no committed Playwright/Selenium dependency manifest.
 
@@ -18,6 +18,7 @@
 - [v] Extend smoke coverage to external-agent wrapper provenance on run detail and run audit Markdown over real HTTP.
 - [v] Make the smoke workspace process-scoped so concurrent pytest runs do not contend on Windows.
 - [v] Prune stale process-scoped smoke workspaces older than 24 hours without failing on locked directories.
+- [v] Validate destructive run-artifact maintenance over real HTTP using seeded disposable artifacts only.
 - [v] Validate smoke and update project status.
 
 ## Research Findings
@@ -26,6 +27,7 @@
 - `/tasks/health.json` is read-only and suitable as the readiness gate before exercising form flows.
 - Seeded active and archived audit JSONL records let the Uvicorn smoke validate source provenance without touching project history.
 - The same Uvicorn smoke can run a local-backend `codex` external-agent task without credentials, then verify wrapper provenance through `/runs/{run_id}` and `/runs/{run_id}/audit.md`.
+- The smoke can safely cover destructive maintenance by seeding old/fresh/running/missing-state run artifact directories inside its disposable workspace, then POSTing `/tasks/maintenance/prune-runs` over HTTP and verifying deletion, preservation, and audit evidence.
 - The process-scoped workspace cleanup only touches `run-*` children under `.tmp/web-browser-smoke`, skips the current process directory, and ignores locked stale directories.
 
 ## Error Log
@@ -48,3 +50,4 @@
 - `python -m py_compile scripts/run_web_browser_smoke.py tests/test_web_browser_smoke.py`: passed.
 - `python -m pytest -q tests/test_web_browser_smoke.py`: 2 passed.
 - `python scripts/run_web_browser_smoke.py`: passed with `web_external_agent_provenance_smoke=passed` and `web_browser_smoke=passed`.
+- `python scripts/run_web_browser_smoke.py`: passed with `maintenance_prune_runs_smoke=passed`, `web_external_agent_provenance_smoke=passed`, and `web_browser_smoke=passed`.

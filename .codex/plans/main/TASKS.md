@@ -342,6 +342,6 @@
 # 2026-06-09 Web Browser Smoke
 
 - Status: completed.
-- Summary: add a real Uvicorn-process Web smoke that exercises the main operator path over HTTP in process-scoped `.tmp/web-browser-smoke/run-{pid}` workspaces with stale `run-*` cleanup, including archived audit provenance, mock template run flow, and external-agent wrapper provenance on run detail plus run audit Markdown.
+- Summary: add a real Uvicorn-process Web smoke that exercises the main operator path over HTTP in process-scoped `.tmp/web-browser-smoke/run-{pid}` workspaces with stale `run-*` cleanup, including archived audit provenance, mock template run flow, disposable run-artifact maintenance cleanup, and external-agent wrapper provenance on run detail plus run audit Markdown.
 - Process file: `.codex/plans/main/web-browser-smoke/process.md`
-- Verification: `python scripts/run_web_browser_smoke.py` passed with `web_external_agent_provenance_smoke=passed` and `web_browser_smoke=passed`; `python -m pytest -q tests/test_web_browser_smoke.py` passed with `2 passed`; `python -m pytest -q` passed with `151 passed`.
+- Verification: `python scripts/run_web_browser_smoke.py` passed with `maintenance_prune_runs_smoke=passed`, `web_external_agent_provenance_smoke=passed`, and `web_browser_smoke=passed`; `python -m pytest -q tests/test_web_browser_smoke.py` passed with `2 passed`; `python -m pytest -q` passed with `159 passed` before this maintenance-smoke extension.

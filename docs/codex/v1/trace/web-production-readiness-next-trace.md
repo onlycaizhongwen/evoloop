@@ -22,6 +22,7 @@ The production-readiness increment adds a repeatable Web browser-path smoke. It 
 - Local-backend `codex` external-agent run creation.
 - Wrapper provenance rendering on run detail over HTTP.
 - Wrapper provenance export in run audit Markdown over HTTP.
+- Destructive run-artifact maintenance cleanup over HTTP with seeded disposable old, fresh, running-linked, and missing-state artifacts.
 - Process-scoped smoke workspace isolation for concurrent test runs.
 - Stale `run-*` smoke workspace cleanup with current-directory and locked-directory safeguards.
 
@@ -29,7 +30,7 @@ The production-readiness increment adds a repeatable Web browser-path smoke. It 
 
 - Optional future Playwright coverage after dependency and browser binary provisioning are explicit.
 - Optional real external-agent browser smoke gated by configured `omx` / `codex` commands.
-- Optional deeper maintenance-control browser smoke for destructive cleanup paths, using seeded disposable artifacts only.
+- Optional deeper maintenance-control browser smoke only when new destructive controls are introduced.
 
 ## Verification Evidence
 
@@ -45,3 +46,4 @@ The production-readiness increment adds a repeatable Web browser-path smoke. It 
 - `python -m py_compile scripts/run_web_browser_smoke.py tests/test_web_browser_smoke.py`: passed.
 - `python -m pytest -q tests/test_web_browser_smoke.py`: 2 passed.
 - `python scripts/run_web_browser_smoke.py`: passed with `web_external_agent_provenance_smoke=passed` and `web_browser_smoke=passed`.
+- `python scripts/run_web_browser_smoke.py`: passed with `maintenance_prune_runs_smoke=passed`, `web_external_agent_provenance_smoke=passed`, and `web_browser_smoke=passed`.
