@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import argparse
+import json
 import subprocess
 import sys
+import time
+from datetime import UTC, datetime
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,6 +20,15 @@ class SmokeStage:
     pass_marker: str
     skip_marker: str | None = None
     timeout_seconds: int = 180
+
+
+@dataclass(frozen=True)
+class StageExecution:
+    returncode: int
+    stdout: str = ""
+    stderr: str = ""
+    error: str | None = None
+    duration_seconds: float = 0.0
 
 
 STAGES = [
@@ -44,10 +57,41 @@ STAGES = [
 ]
 
 
-def main() -> int:
-    results: list[tuple[SmokeStage, str, subprocess.CompletedProcess[str]]] = []
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    results: list[tuple[SmokeStage, str, StageExecution]] = []
     for stage in STAGES:
         print(f"stage={stage.name} status=running command={format_command(stage.command)}")
+        completed = run_stage(stage)
+        status = classify_stage(stage, completed)
+        results.append((stage, status, completed))
+        print_stage_output(stage, completed)
+        print(f"stage={stage.name} status={status} exit_code={completed.returncode}")
+        if status == "failed":
+            print_summary(results)
+            print("production_readiness_smoke=failed")
+            write_summary_json(args.summary_json, results, overall_status="failed")
+            return completed.returncode or 1
+
+    print_summary(results)
+    print("production_readiness_smoke=passed")
+    write_summary_json(args.summary_json, results, overall_status="passed")
+    return 0
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run the aggregate production readiness smoke suite.")
+    parser.add_argument(
+        "--summary-json",
+        type=Path,
+        help="Optional path for a machine-readable pass/skip/fail summary.",
+    )
+    return parser.parse_args([] if argv is None else argv)
+
+
+def run_stage(stage: SmokeStage) -> StageExecution:
+    started = time.monotonic()
+    try:
         completed = subprocess.run(
             stage.command,
             cwd=ROOT,
@@ -56,21 +100,29 @@ def main() -> int:
             check=False,
             timeout=stage.timeout_seconds,
         )
-        status = classify_stage(stage, completed)
-        results.append((stage, status, completed))
-        print_stage_output(stage, completed)
-        print(f"stage={stage.name} status={status} exit_code={completed.returncode}")
-        if status == "failed":
-            print_summary(results)
-            print("production_readiness_smoke=failed")
-            return completed.returncode or 1
+    except subprocess.TimeoutExpired as exc:
+        return StageExecution(
+            returncode=124,
+            stdout=text_or_empty(exc.stdout),
+            stderr=text_or_empty(exc.stderr),
+            error=f"timed out after {stage.timeout_seconds}s",
+            duration_seconds=elapsed_seconds(started),
+        )
+    except OSError as exc:
+        return StageExecution(
+            returncode=127,
+            error=f"{type(exc).__name__}: {exc}",
+            duration_seconds=elapsed_seconds(started),
+        )
+    return StageExecution(
+        returncode=completed.returncode,
+        stdout=completed.stdout,
+        stderr=completed.stderr,
+        duration_seconds=elapsed_seconds(started),
+    )
 
-    print_summary(results)
-    print("production_readiness_smoke=passed")
-    return 0
 
-
-def classify_stage(stage: SmokeStage, completed: subprocess.CompletedProcess[str]) -> str:
+def classify_stage(stage: SmokeStage, completed: StageExecution) -> str:
     combined = completed.stdout + completed.stderr
     if completed.returncode == 0 and stage.pass_marker in combined:
         return "passed"
@@ -79,7 +131,9 @@ def classify_stage(stage: SmokeStage, completed: subprocess.CompletedProcess[str
     return "failed"
 
 
-def print_stage_output(stage: SmokeStage, completed: subprocess.CompletedProcess[str]) -> None:
+def print_stage_output(stage: SmokeStage, completed: StageExecution) -> None:
+    if completed.error:
+        print(f"stage={stage.name} error={completed.error}")
     if completed.stdout.strip():
         print(f"stage={stage.name} stdout_begin")
         print(completed.stdout.rstrip())
@@ -90,7 +144,7 @@ def print_stage_output(stage: SmokeStage, completed: subprocess.CompletedProcess
         print(f"stage={stage.name} stderr_end")
 
 
-def print_summary(results: list[tuple[SmokeStage, str, subprocess.CompletedProcess[str]]]) -> None:
+def print_summary(results: list[tuple[SmokeStage, str, StageExecution]]) -> None:
     passed = sum(1 for _stage, status, _completed in results if status == "passed")
     skipped = sum(1 for _stage, status, _completed in results if status == "skipped")
     failed = sum(1 for _stage, status, _completed in results if status == "failed")
@@ -99,9 +153,61 @@ def print_summary(results: list[tuple[SmokeStage, str, subprocess.CompletedProce
         print(f"production_readiness_stage name={stage.name} status={status} exit_code={completed.returncode}")
 
 
+def write_summary_json(
+    path: Path | None,
+    results: list[tuple[SmokeStage, str, StageExecution]],
+    *,
+    overall_status: str,
+) -> None:
+    if path is None:
+        return
+    summary = build_summary(results, overall_status=overall_status)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"production_readiness_summary_json={path}")
+
+
+def build_summary(
+    results: list[tuple[SmokeStage, str, StageExecution]],
+    *,
+    overall_status: str,
+) -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "overall_status": overall_status,
+        "passed": sum(1 for _stage, status, _completed in results if status == "passed"),
+        "skipped": sum(1 for _stage, status, _completed in results if status == "skipped"),
+        "failed": sum(1 for _stage, status, _completed in results if status == "failed"),
+        "stages": [
+            {
+                "name": stage.name,
+                "status": status,
+                "exit_code": completed.returncode,
+                "command": stage.command,
+                "error": completed.error,
+                "duration_seconds": completed.duration_seconds,
+            }
+            for stage, status, completed in results
+        ],
+    }
+
+
 def format_command(command: list[str]) -> str:
     return " ".join(command)
 
 
+def text_or_empty(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode(errors="replace")
+    return value
+
+
+def elapsed_seconds(started: float) -> float:
+    return round(time.monotonic() - started, 3)
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

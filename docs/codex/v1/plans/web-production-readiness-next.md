@@ -48,3 +48,7 @@ Each invocation uses its own `run-{pid}` workspace to tolerate concurrent pytest
 `scripts/run_production_readiness_smoke.py` is the one-command readiness entry point for urgent validation and demos. It runs the demo readiness smoke, external-agent closed-loop smoke, opt-in real external-agent gate, and Web HTTP smoke in sequence, then prints a pass/skip/fail summary.
 
 The real external-agent stage is allowed to skip when `OMX_RUN_REAL_EXTERNAL_AGENT_SMOKE=1` is not set, so the command remains credential-free by default while still reporting that the real-command gate was not executed.
+
+The command also catches stage timeouts and process launch failures, prints the failed stage as structured evidence, emits the aggregate summary, and exits non-zero without a Python traceback becoming the only diagnostic.
+
+Pass `--summary-json <path>` to write the same pass/skip/fail evidence as machine-readable JSON for CI, Web dashboards, or handoff artifacts. The JSON file is written for both successful and failed aggregate runs, includes `schema_version`, UTC `generated_at`, and per-stage `duration_seconds`.

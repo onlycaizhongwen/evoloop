@@ -15,7 +15,7 @@
 
 | 主题 | 当前状态 | 需求状态 | 设计状态 | 计划状态 | 实现状态 | 备注 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| 自动循环进化编码智能体系统 | 生产就绪硬化中 | 已完成 | 已完成 | 已完成 | MVP 主链路、Web 运维硬化、真实 HTTP smoke、外部 agent 闭环 smoke 已完成 | 已具备 DDD 编排主链路、patch 审批/验证闭环、Web 任务管理/审计/健康检查、run artifact 清理、wrapper provenance 展示和 157 项回归测试基线。 |
+| 自动循环进化编码智能体系统 | 生产就绪硬化中 | 已完成 | 已完成 | 已完成 | MVP 主链路、Web 运维硬化、真实 HTTP smoke、外部 agent 闭环 smoke 已完成 | 已具备 DDD 编排主链路、patch 审批/验证闭环、Web 任务管理/审计/健康检查、run artifact 清理、wrapper provenance 展示和 160 项以上回归测试基线。 |
 
 ## 当前完成度快照
 
@@ -23,7 +23,7 @@
 - Web 运维能力：已完成主要硬化。任务管理、批量操作审计、审计轮转/归档搜索、source provenance、只读健康检查、Web Job 清理和 run artifact 清理均已覆盖。
 - 真实浏览器路径验证：已完成当前无新增依赖版本。`scripts/run_web_browser_smoke.py` 会启动真实 Uvicorn 进程，走 HTTP 页面/导出/模板运行/job 跳转/run detail 路径，验证外部 agent wrapper provenance，并用 seeded disposable artifacts 覆盖 run artifact 清理这种破坏性维护路径。
 - 真实 agent 执行闭环：已完成 credential-free 版本和 opt-in 真实命令 gate。`scripts/run_external_agent_closed_loop_smoke.py` 使用本地 backend 走 `codex` 外部命令适配器、wrapper 进程、review JSON、quality gate 和最终报告；`scripts/run_real_external_agent_smoke.py` 在 `OMX_RUN_REAL_EXTERNAL_AGENT_SMOKE=1` 且 runtime backend 命令配置齐全时验证真实 `codex` / `omx` wrapper 命令闭环。
-- 生产就绪一键验证：已新增 `scripts/run_production_readiness_smoke.py`，串联 demo readiness、外部 agent 闭环、真实命令 gate 状态和 Web HTTP smoke，默认 credential-free。
+- 生产就绪一键验证：已新增 `scripts/run_production_readiness_smoke.py`，串联 demo readiness、外部 agent 闭环、真实命令 gate 状态和 Web HTTP smoke，默认 credential-free；当前增量补强了阶段超时/命令启动失败时的结构化失败输出，并支持 `--summary-json` 输出带 schema/version/time/duration 的机器可读摘要。
 - 当前提交状态：生产就绪硬化成果已按用户要求进入提交/推送闭环。
 
 ## 剩余事项
