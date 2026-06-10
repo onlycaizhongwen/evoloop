@@ -25,6 +25,7 @@ The production-readiness increment adds a repeatable Web browser-path smoke. It 
 - Destructive run-artifact maintenance cleanup over HTTP with seeded disposable old, fresh, running-linked, and missing-state artifacts.
 - Process-scoped smoke workspace isolation for concurrent test runs.
 - Stale `run-*` smoke workspace cleanup with current-directory and locked-directory safeguards.
+- One-command production readiness smoke aggregation for demo readiness, external-agent closure, real-command gate status, and Web HTTP coverage.
 
 ## Remaining Work
 
@@ -47,3 +48,4 @@ The production-readiness increment adds a repeatable Web browser-path smoke. It 
 - `python -m pytest -q tests/test_web_browser_smoke.py`: 2 passed.
 - `python scripts/run_web_browser_smoke.py`: passed with `web_external_agent_provenance_smoke=passed` and `web_browser_smoke=passed`.
 - `python scripts/run_web_browser_smoke.py`: passed with `maintenance_prune_runs_smoke=passed`, `web_external_agent_provenance_smoke=passed`, and `web_browser_smoke=passed`.
+- `python scripts/run_production_readiness_smoke.py`: passed with `production_readiness_summary passed=3 skipped=1 failed=0` and `production_readiness_smoke=passed`.

@@ -42,3 +42,9 @@ Each invocation uses its own `run-{pid}` workspace to tolerate concurrent pytest
 - Add optional Playwright coverage once dependency installation and browser binary provisioning are explicit.
 - Add a real external-agent smoke variant gated by available `omx` / `codex` command configuration.
 - Add deeper production maintenance browser coverage only for newly introduced destructive controls, with seeded disposable artifacts.
+
+## Production Readiness Command
+
+`scripts/run_production_readiness_smoke.py` is the one-command readiness entry point for urgent validation and demos. It runs the demo readiness smoke, external-agent closed-loop smoke, opt-in real external-agent gate, and Web HTTP smoke in sequence, then prints a pass/skip/fail summary.
+
+The real external-agent stage is allowed to skip when `OMX_RUN_REAL_EXTERNAL_AGENT_SMOKE=1` is not set, so the command remains credential-free by default while still reporting that the real-command gate was not executed.
