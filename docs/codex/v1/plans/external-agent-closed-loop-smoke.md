@@ -24,3 +24,21 @@ Add a repeatable smoke that proves the external command-agent contract works fro
 
 - Add an opt-in real `omx` / `codex` command smoke when runtime configuration is present.
 - Add deeper real-command browser smoke once runtime credentials and command configuration are available.
+
+## Opt-In Real Command Smoke
+
+`scripts/run_real_external_agent_smoke.py` provides the gated real-command path. By default it exits successfully with `real_external_agent_smoke=skipped`; it only runs when `OMX_RUN_REAL_EXTERNAL_AGENT_SMOKE=1` is set and the selected runtime has backend commands configured.
+
+Required environment for `--runtime codex`:
+
+- `OMX_RUN_REAL_EXTERNAL_AGENT_SMOKE=1`
+- `OMX_CODEX_CODER_COMMAND`
+- `OMX_CODEX_REVIEWER_COMMAND`
+
+Required environment for `--runtime omx`:
+
+- `OMX_RUN_REAL_EXTERNAL_AGENT_SMOKE=1`
+- `OMX_OMX_CODER_COMMAND`
+- `OMX_OMX_REVIEWER_COMMAND`
+
+The backend command templates are rendered by `scripts/run_external_agent.py` with Python `str.format()`. Literal JSON braces in command strings must be escaped as `{{` and `}}`; placeholders such as `{task_id}`, `{prompt_file}`, `{worktree}`, and `{output_last_message}` remain single-braced.

@@ -335,9 +335,9 @@
 # 2026-06-09 External Agent Closed Loop Smoke
 
 - Status: completed.
-- Summary: add a script-level smoke for external command-agent execution from task JSON through CLI, wrapper process, reviewer JSON, quality gate, and final report artifacts.
+- Summary: add a script-level smoke for external command-agent execution from task JSON through CLI, wrapper process, reviewer JSON, quality gate, and final report artifacts. A second opt-in real-command smoke gate now runs only when `OMX_RUN_REAL_EXTERNAL_AGENT_SMOKE=1` and runtime backend command env vars are configured.
 - Process file: `.codex/plans/main/external-agent-closed-loop-smoke/process.md`
-- Verification: `python scripts/run_external_agent_closed_loop_smoke.py` passed with `external_agent_closed_loop_smoke=passed`; targeted external-agent pytest passed with `17 passed`; full `python -m pytest -q` passed with `152 passed`.
+- Verification: `python scripts/run_external_agent_closed_loop_smoke.py` passed with `external_agent_closed_loop_smoke=passed`; `python -m pytest -q tests/test_real_external_agent_smoke.py` passed with `2 passed`; opt-in simulated backend run passed with `real_external_agent_smoke=passed`; full `python -m pytest -q` passed with `157 passed` before the opt-in smoke gate change.
 
 # 2026-06-09 Web Browser Smoke
 

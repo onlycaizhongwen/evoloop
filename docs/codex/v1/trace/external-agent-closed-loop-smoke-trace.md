@@ -14,10 +14,11 @@ Completed.
 - The smoke validates wrapper log provenance content: runtime, coder/reviewer roles, backend command count, and successful exit codes.
 - Web run detail parses `logs/external_agent_wrapper.log` and shows wrapper runtime, roles, task IDs, exit code/dry-run status, backend command, prompt files, and raw diagnostics.
 - Run audit Markdown exports the same wrapper provenance so offline audit summaries preserve command-level evidence.
+- `scripts/run_real_external_agent_smoke.py` adds an opt-in real-command smoke gate for configured `codex` / `omx` backend commands. It skips safely by default and verifies real wrapper/backend provenance when explicitly enabled.
 
 ## Remaining Work
 
-- Optional real `omx` / `codex` command smoke when runtime configuration and credentials are present.
+- Optional execution of the real `omx` / `codex` command smoke in a credentialed environment.
 - Optional real-command browser smoke once runtime credentials and command configuration are available.
 
 ## Verification Evidence
@@ -32,3 +33,6 @@ Completed.
 - `python -m pytest -q tests/test_web_ui.py`: 62 passed.
 - `python -m pytest -q`: 156 passed.
 - `git diff --check`: passed; Git reported only Windows CRLF conversion warnings.
+- `python -m py_compile scripts/run_real_external_agent_smoke.py tests/test_real_external_agent_smoke.py`: passed.
+- `python -m pytest -q tests/test_real_external_agent_smoke.py`: 2 passed.
+- `python scripts/run_real_external_agent_smoke.py`: skipped safely with `real_external_agent_smoke=skipped`.
