@@ -27,7 +27,7 @@ The production-readiness increment adds a repeatable Web browser-path smoke. It 
 - Stale `run-*` smoke workspace cleanup with current-directory and locked-directory safeguards.
 - One-command production readiness smoke aggregation for demo readiness, external-agent closure, real-command gate status, and Web HTTP coverage.
 - Structured production readiness failure reporting for stage timeouts and command launch failures.
-- Optional production readiness JSON summary output for CI and downstream dashboards, including schema version, UTC generation time, and per-stage duration.
+- Optional production readiness JSON summary output for CI and downstream dashboards, including schema version, UTC generation time, per-stage duration, and environment readiness diagnostics.
 
 ## Remaining Work
 
@@ -54,6 +54,6 @@ The production-readiness increment adds a repeatable Web browser-path smoke. It 
 - `python -m py_compile scripts/run_production_readiness_smoke.py tests/test_production_readiness_smoke.py`: passed.
 - `python -m pytest -q tests/test_production_readiness_smoke.py`: 9 passed, including timeout, command launch failure, JSON summary reporting, and JSON metadata/duration coverage.
 - `python scripts/run_production_readiness_smoke.py`: passed with `production_readiness_summary passed=3 skipped=1 failed=0` and `production_readiness_smoke=passed` after structured failure handling.
-- `python scripts/run_production_readiness_smoke.py --summary-json .tmp/production-readiness-summary.json`: passed and wrote pass/skip/fail stage JSON with `schema_version`, UTC `generated_at`, and `duration_seconds`.
+- `python scripts/run_production_readiness_smoke.py --summary-json .tmp/production-readiness-summary.json`: passed and wrote pass/skip/fail stage JSON with `schema_version`, UTC `generated_at`, `duration_seconds`, command detection, Playwright detection, and real external-agent env readiness.
 - `python -m pytest -q`: 168 passed after versioned JSON summary hardening.
 - `git diff --check`: passed; Git reported only Windows CRLF conversion warnings.

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
+import os
+import shutil
 import subprocess
 import sys
 import time
@@ -176,6 +179,7 @@ def build_summary(
         "schema_version": 1,
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "overall_status": overall_status,
+        "environment": build_environment_summary(),
         "passed": sum(1 for _stage, status, _completed in results if status == "passed"),
         "skipped": sum(1 for _stage, status, _completed in results if status == "skipped"),
         "failed": sum(1 for _stage, status, _completed in results if status == "failed"),
@@ -190,6 +194,27 @@ def build_summary(
             }
             for stage, status, completed in results
         ],
+    }
+
+
+def build_environment_summary() -> dict[str, object]:
+    codex_command = shutil.which("codex")
+    omx_command = shutil.which("omx")
+    required_codex_env = ["OMX_CODEX_CODER_COMMAND", "OMX_CODEX_REVIEWER_COMMAND"]
+    required_omx_env = ["OMX_OMX_CODER_COMMAND", "OMX_OMX_REVIEWER_COMMAND"]
+    missing_codex_env = [name for name in required_codex_env if not os.environ.get(name)]
+    missing_omx_env = [name for name in required_omx_env if not os.environ.get(name)]
+    return {
+        "codex_command": codex_command,
+        "omx_command": omx_command,
+        "playwright_python_installed": importlib.util.find_spec("playwright") is not None,
+        "real_external_agent": {
+            "opt_in_enabled": os.environ.get("OMX_RUN_REAL_EXTERNAL_AGENT_SMOKE") == "1",
+            "codex_backend_env_ready": not missing_codex_env,
+            "codex_backend_env_missing": missing_codex_env,
+            "omx_backend_env_ready": not missing_omx_env,
+            "omx_backend_env_missing": missing_omx_env,
+        },
     }
 
 

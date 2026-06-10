@@ -44,6 +44,8 @@ def test_production_readiness_writes_success_summary_json(monkeypatch, tmp_path)
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     assert summary["schema_version"] == 1
     assert summary["generated_at"].endswith("+00:00")
+    assert "playwright_python_installed" in summary["environment"]
+    assert "real_external_agent" in summary["environment"]
     assert summary["overall_status"] == "passed"
     assert summary["passed"] == 1
     assert summary["skipped"] == 1
@@ -93,6 +95,7 @@ def test_production_readiness_writes_failure_summary_json(monkeypatch, tmp_path)
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     assert summary["schema_version"] == 1
     assert summary["generated_at"].endswith("+00:00")
+    assert "codex_backend_env_ready" in summary["environment"]["real_external_agent"]
     assert summary["overall_status"] == "failed"
     assert summary["passed"] == 0
     assert summary["skipped"] == 0

@@ -23,13 +23,13 @@
 - Web 运维能力：已完成主要硬化。任务管理、批量操作审计、审计轮转/归档搜索、source provenance、只读健康检查、Web Job 清理和 run artifact 清理均已覆盖。
 - 真实浏览器路径验证：已完成当前无新增依赖版本。`scripts/run_web_browser_smoke.py` 会启动真实 Uvicorn 进程，走 HTTP 页面/导出/模板运行/job 跳转/run detail 路径，验证外部 agent wrapper provenance，并用 seeded disposable artifacts 覆盖 run artifact 清理这种破坏性维护路径。
 - 真实 agent 执行闭环：已完成 credential-free 版本和 opt-in 真实命令 gate。`scripts/run_external_agent_closed_loop_smoke.py` 使用本地 backend 走 `codex` 外部命令适配器、wrapper 进程、review JSON、quality gate 和最终报告；`scripts/run_real_external_agent_smoke.py` 在 `OMX_RUN_REAL_EXTERNAL_AGENT_SMOKE=1` 且 runtime backend 命令配置齐全时验证真实 `codex` / `omx` wrapper 命令闭环。
-- 生产就绪一键验证：已新增 `scripts/run_production_readiness_smoke.py`，串联 demo readiness、外部 agent 闭环、真实命令 gate 状态和 Web HTTP smoke，默认 credential-free；当前增量补强了阶段超时/命令启动失败时的结构化失败输出，并支持 `--summary-json` 输出带 schema/version/time/duration 的机器可读摘要。
+- 生产就绪一键验证：已新增 `scripts/run_production_readiness_smoke.py`，串联 demo readiness、外部 agent 闭环、真实命令 gate 状态和 Web HTTP smoke，默认 credential-free；当前增量补强了阶段超时/命令启动失败时的结构化失败输出，并支持 `--summary-json` 输出带 schema/version/time/duration/environment 的机器可读摘要。
 - 当前提交状态：生产就绪硬化成果已按用户要求进入提交/推送闭环。
 
 ## 剩余事项
 
-- 可选 Playwright 覆盖：需要先明确依赖安装和浏览器 binary provisioning 策略。
-- 可选真实 `omx` / `codex` 命令实跑：gated smoke 入口已新增；仍需要本机运行时命令、凭据和环境配置可用后执行。
+- 可选 Playwright 覆盖：需要先明确依赖安装和浏览器 binary provisioning 策略；当前环境诊断显示 Python Playwright 包未安装。
+- 可选真实 `omx` / `codex` 命令实跑：gated smoke 入口已新增；当前环境诊断显示 `codex`/`omx` 命令存在，但 `OMX_CODEX_*_COMMAND` / `OMX_OMX_*_COMMAND` 后端命令环境变量未配置。
 - 可选新增维护控制 smoke：现有 run artifact 清理已由 seeded disposable HTTP smoke 覆盖；后续仅在新增破坏性控制时补同类验证。
 - 历史文档清理：部分早期记录仍有乱码，可单独做一次只读核对后的文档清理，不阻塞当前功能闭环。
 
